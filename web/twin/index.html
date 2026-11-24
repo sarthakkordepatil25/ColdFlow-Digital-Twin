@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ColdFlow | Smart Cold-Chain Warehouse 3D Digital Twin</title>
+  <title>COLDFlow - Smart Cold-Chain Warehouse</title>
   <link rel="stylesheet" href="css/twin.css">
   <!-- Load Local Three.js & OrbitControls (Zero external dependencies) -->
   <script src="js/three.min.js"></script>
@@ -13,166 +13,472 @@
 </head>
 <body>
 
-  <!-- Full-Screen 3D WebGL Viewport -->
-  <div id="warehouse-viewport"></div>
+  <!-- Main Dashboard Container -->
+  <div class="dashboard-root">
 
-  <!-- HUD Control Overlay Layer -->
-  <div class="hud-layer">
-
-    <!-- Top Navigation Bar -->
-    <header class="top-bar interactive">
-      <div class="brand-section">
-        <div class="brand-icon">❄</div>
-        <div>
-          <div class="brand-title">Cold<span>Flow</span></div>
-          <div class="brand-subtitle">Smart Cold-Chain 3D Digital Twin</div>
+    <!-- Top Header Bar -->
+    <header class="dashboard-header">
+      <div class="header-brand">
+        <div class="brand-cube-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+          </svg>
         </div>
+        <h1 class="header-title">COLDFlow <span class="header-dash">-</span> <span class="header-subtitle">Smart Cold-Chain Warehouse</span></h1>
       </div>
 
-      <div class="system-status-pills">
-        <div class="status-pill">
-          <div id="db-status-dot" class="status-dot"></div>
-          <span id="db-status-label">Supabase Connecting...</span>
+      <div class="header-right-group">
+        <!-- Compact system status pills -->
+        <div class="system-status-pills">
+          <div class="status-pill" title="Supabase Database Connection">
+            <div id="db-status-dot" class="status-dot"></div>
+            <span id="db-status-label">Supabase Connecting...</span>
+          </div>
+          <div class="status-pill" title="C++ Engine Mode">
+            <span class="status-dot active"></span>
+            <span>C++ Engine: <strong id="cpp-engine-label" style="color:var(--cyan);">Checking...</strong></span>
+          </div>
+          <div class="status-pill" title="Active Batches Count">
+            <span>Batches: <strong id="batch-count-badge" style="color:var(--amber);">0</strong></span>
+          </div>
         </div>
-        <div class="status-pill">
-          <div class="status-dot"></div>
-          <span>C++ Engine: <strong id="cpp-engine-label" style="color:var(--cyan);">Checking...</strong></span>
-        </div>
-        <div class="status-pill">
-          <span>Active Batches: <strong id="batch-count-badge" style="color:var(--amber);">0</strong></span>
-        </div>
-      </div>
 
-      <div class="top-actions">
-        <button id="btn-dispatch-fefo" class="btn btn-amber">
-          <span>⚡</span> Dispatch Next FEFO
-        </button>
-        <button id="btn-add-batch" class="btn btn-primary">
-          <span>+</span> Inbound Batch
-        </button>
-        <button id="btn-cycle-sim" class="btn btn-secondary">
-          <span>⟳</span> Trigger Cycle
-        </button>
-        <button id="btn-sensor-analytics" class="btn btn-secondary">
-          <span>📊</span> Sensor IoT Analytics
-        </button>
+        <!-- Quick Action Buttons -->
+        <div class="header-actions">
+          <button id="btn-dispatch-fefo" class="btn btn-action-amber" title="Dispatch earliest expiring batch">
+            <span>⚡</span> Dispatch FEFO
+          </button>
+          <button id="btn-add-batch" class="btn btn-action-blue" title="Inbound batch intake">
+            <span>+</span> Inbound
+          </button>
+          <button id="btn-cycle-sim" class="btn btn-action-dark" title="Trigger simulation cycle">
+            <span>⟳</span> Sim Cycle
+          </button>
+          <button id="btn-sensor-analytics" class="btn btn-action-dark" title="Open 1.41M sensor IoT analytics">
+            <span>📊</span> Sensors
+          </button>
+          <!-- Prominent Inventory Button matching reference image -->
+          <button id="btn-header-inventory" class="btn btn-inventory">
+            Inventory
+          </button>
+        </div>
       </div>
     </header>
 
-    <!-- Cockpit Cards: Left (Zones & Inventory) -->
-    <main class="cockpit-container">
-      <div class="cockpit-left">
-
-        <!-- Zone Telemetry Panel -->
-        <section class="panel-card">
-          <div class="card-header">
-            <span class="card-title">Warehouse Storage Zones</span>
-            <span style="font-size:11px; color:var(--muted);">Click zone for diagnostics</span>
+    <!-- Top KPI Cards Row (Freezer, Chiller, Ambient) -->
+    <section class="kpi-row">
+      <!-- Freezer Card -->
+      <div id="kpi-card-freezer" class="kpi-card kpi-card-freezer" onclick="window.twin && window.twin.openZoneInspector('Freezer')">
+        <div class="kpi-icon-wrap kpi-icon-freezer">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <line x1="12" y1="2" x2="12" y2="22"></line>
+            <path d="m20 16-4-4 4-4"></path>
+            <path d="m4 8 4 4-4 4"></path>
+            <path d="m16 4-4 4-4-4"></path>
+            <path d="m8 20 4-4 4 4"></path>
+          </svg>
+        </div>
+        <div class="kpi-content">
+          <div class="kpi-title">Freezer</div>
+          <div class="kpi-meta">
+            Target: <span id="kpi-freezer-target">-20.0</span> °C
           </div>
-          <div id="zone-cards-container" class="zone-grid">
-            <div style="font-size:12px; color:var(--muted); padding:10px;">Loading zone temperatures...</div>
+          <div class="kpi-reading">
+            <span class="kpi-reading-label">Current:</span>
+            <span id="kpi-freezer-current" class="kpi-temp-val kpi-temp-freezer">-19.65 °C</span>
           </div>
-        </section>
+          <div class="kpi-status-row">
+            <span class="kpi-status-label">STATUS:</span>
+            <span id="kpi-freezer-status" class="kpi-status-badge status-normal">NORMAL</span>
+          </div>
+        </div>
+      </div>
 
-        <!-- Inventory & FEFO Queue Panel -->
-        <section class="panel-card">
-          <div class="card-header">
-            <div>
-              <span class="card-title">FEFO Inventory Flow</span>
-              <span style="font-size:11px; color:var(--muted); margin-left:6px;">(<span id="total-units-count">0</span> units)</span>
+      <!-- Chiller Card -->
+      <div id="kpi-card-chiller" class="kpi-card kpi-card-chiller" onclick="window.twin && window.twin.openZoneInspector('Chiller')">
+        <div class="kpi-icon-wrap kpi-icon-chiller">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 12c-2.8 0-5 2.2-5 5s2.2 5 5 5 5-2.2 5-5-2.2-5-5-5Z"></path>
+            <path d="M12 12c0-2.8 2.2-5 5-5s5 2.2 5 5-2.2 5-5 5-5-2.2-5-5Z"></path>
+            <path d="M12 12c2.8 0 5-2.2 5-5s-2.2-5-5-5-5 2.2-5 5 2.2 5 5 5Z"></path>
+            <path d="M12 12c0 2.8-2.2 5-5 5s-5-2.2-5-5 2.2-5 5-5 5 2.2 5 5Z"></path>
+          </svg>
+        </div>
+        <div class="kpi-content">
+          <div class="kpi-title">Chiller</div>
+          <div class="kpi-meta">
+            Target: <span id="kpi-chiller-target">4.0</span> °C
+          </div>
+          <div class="kpi-reading">
+            <span class="kpi-reading-label">Current:</span>
+            <span id="kpi-chiller-current" class="kpi-temp-val kpi-temp-chiller">4.35 °C</span>
+          </div>
+          <div class="kpi-status-row">
+            <span class="kpi-status-label">STATUS:</span>
+            <span id="kpi-chiller-status" class="kpi-status-badge status-normal">NORMAL</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ambient Card -->
+      <div id="kpi-card-ambient" class="kpi-card kpi-card-ambient" onclick="window.twin && window.twin.openZoneInspector('Ambient')">
+        <div class="kpi-icon-wrap kpi-icon-ambient">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"></path>
+          </svg>
+        </div>
+        <div class="kpi-content">
+          <div class="kpi-title">Ambient</div>
+          <div class="kpi-meta">
+            Target: <span id="kpi-ambient-target">25.0</span> °C
+          </div>
+          <div class="kpi-reading">
+            <span class="kpi-reading-label">Current:</span>
+            <span id="kpi-ambient-current" class="kpi-temp-val kpi-temp-ambient">25.35 °C</span>
+          </div>
+          <div class="kpi-status-row">
+            <span class="kpi-status-label">STATUS:</span>
+            <span id="kpi-ambient-status" class="kpi-status-badge status-normal">NORMAL</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main 3D Warehouse Visualization Card -->
+    <section class="warehouse-panel">
+      <div class="panel-header-bar">
+        <div class="panel-title-group">
+          <div class="panel-icon-cube">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+          </div>
+          <h2 class="panel-title">Warehouse Visualization</h2>
+        </div>
+
+        <!-- Camera Navigation Controls Bar -->
+        <nav class="camera-controls-bar">
+          <button class="camera-btn active" data-camera="overview">Overview</button>
+          <button class="camera-btn" data-camera="freezer">Freezer</button>
+          <button class="camera-btn" data-camera="chiller">Chiller</button>
+          <button class="camera-btn" data-camera="ambient">Ambient</button>
+          <button class="camera-btn" data-camera="dock">Loading Dock</button>
+        </nav>
+      </div>
+
+      <!-- 3D Viewport Box -->
+      <div class="warehouse-viewport-wrapper">
+        <div id="warehouse-viewport"></div>
+
+        <!-- In-Scene Top Right Legend Overlay -->
+        <div class="scene-legend-card">
+          <div class="legend-row">
+            <span class="legend-badge legend-badge-freezer"></span>
+            <span class="legend-label">Freezer Zone</span>
+          </div>
+          <div class="legend-row">
+            <span class="legend-badge legend-badge-chiller"></span>
+            <span class="legend-label">Chiller Zone</span>
+          </div>
+          <div class="legend-row">
+            <span class="legend-badge legend-badge-ambient"></span>
+            <span class="legend-label">Ambient Zone</span>
+          </div>
+          <div class="legend-row">
+            <span class="legend-robot-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#eab308">
+                <rect x="5" y="7" width="14" height="12" rx="3" stroke="#ca8a04" stroke-width="1.5"></rect>
+                <circle cx="9" cy="11" r="1.5" fill="#0f172a"></circle>
+                <circle cx="15" cy="11" r="1.5" fill="#0f172a"></circle>
+                <rect x="9" y="15" width="6" height="1.5" rx="0.5" fill="#0f172a"></rect>
+                <circle cx="12" cy="4" r="1.5" fill="#eab308"></circle>
+                <line x1="12" y1="5.5" x2="12" y2="7" stroke="#eab308" stroke-width="1.5"></line>
+              </svg>
+            </span>
+            <span class="legend-label">Robot</span>
+          </div>
+        </div>
+
+        <!-- Real-time 3D Engine Metrics Badge -->
+        <div id="engine-perf-hud" class="engine-perf-badge">
+          <span style="color:var(--cyan); font-weight:600;">⚡ 3D Engine:</span>
+          <span id="fps-counter-badge">60 FPS | 14,800 Polys</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom Dashboard Row -->
+    <section class="bottom-dashboard-grid">
+
+      <!-- Left Column: Temperature Monitoring - CG Visualization -->
+      <div class="bottom-panel cg-temp-panel">
+        <div class="bottom-panel-header">
+          <div class="panel-icon-chart">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 3v18h18"></path>
+              <path d="m19 9-5 5-4-4-3 3"></path>
+            </svg>
+          </div>
+          <h3 class="bottom-panel-title">Temperature Monitoring - CG Visualization</h3>
+        </div>
+
+        <!-- Multi-line SVG Time-Series Chart -->
+        <div class="cg-chart-container">
+          <svg id="cg-simulation-chart" width="100%" height="160" viewBox="0 0 680 160" preserveAspectRatio="none">
+            <!-- Dynamic Grid, Labels, Lines and Points injected via TwinController -->
+          </svg>
+        </div>
+
+        <!-- Chart Legend -->
+        <div class="cg-chart-legend">
+          <div class="chart-legend-item"><span class="chart-dot chart-dot-freezer"></span> Freezer</div>
+          <div class="chart-legend-item"><span class="chart-dot chart-dot-chiller"></span> Chiller</div>
+          <div class="chart-legend-item"><span class="chart-dot chart-dot-ambient"></span> Ambient</div>
+          <div class="chart-legend-title">Simulation Cycle</div>
+        </div>
+
+        <!-- Bottom COA Register Text Strip -->
+        <div class="cg-coa-register-strip">
+          <div class="strip-header">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="2" width="20" height="20" rx="4"></rect>
+              <path d="M7 2v20M17 2v20M2 7h20M2 17h20"></path>
+            </svg>
+            <span>COA Control Registers</span>
+          </div>
+          <div class="strip-subheading">
+            R0 = Target | R1 = Current | R2 = Error | R3 = Control | R4 = Energy
+          </div>
+          <div class="strip-data-rows">
+            <div id="strip-row-freezer" class="strip-row">
+              <span class="strip-zone-tag freezer">FREEZER</span> | R0: -20.00 | R1: -19.65 | R2: 0.10 | R3: 0 | R4: 0.15 kWh | Compressor: OFF
             </div>
-            <span style="font-size:11px; color:var(--muted);">Click batch to locate</span>
+            <div id="strip-row-chiller" class="strip-row">
+              <span class="strip-zone-tag chiller">CHILLER</span> | R0: 4.00 | R1: 4.35 | R2: 0.10 | R3: 0 | R4: 0.15 kWh | Compressor: OFF
+            </div>
+            <div id="strip-row-ambient" class="strip-row">
+              <span class="strip-zone-tag ambient">AMBIENT</span> | R0: 25.00 | R1: 25.35 | R2: 0.10 | R3: 0 | R4: 0.15 kWh | Compressor: OFF
+            </div>
           </div>
-          <div id="inventory-list" class="inventory-list">
-            <div style="font-size:12px; color:var(--muted); padding:10px;">Loading inventory records from Supabase...</div>
+        </div>
+      </div>
+
+      <!-- Right Column: COA Table + Inventory Management -->
+      <div class="bottom-right-column">
+
+        <!-- COA Control Registers Table -->
+        <div class="bottom-panel coa-table-panel">
+          <div class="bottom-panel-header">
+            <div class="panel-icon-chip">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                <rect x="9" y="9" width="6" height="6"></rect>
+                <line x1="9" y1="1" x2="9" y2="4"></line>
+                <line x1="15" y1="1" x2="15" y2="4"></line>
+                <line x1="9" y1="20" x2="9" y2="23"></line>
+                <line x1="15" y1="20" x2="15" y2="23"></line>
+                <line x1="20" y1="9" x2="23" y2="9"></line>
+                <line x1="20" y1="14" x2="23" y2="14"></line>
+                <line x1="1" y1="9" x2="4" y2="9"></line>
+                <line x1="1" y1="14" x2="4" y2="14"></line>
+              </svg>
+            </div>
+            <h3 class="bottom-panel-title">COA Control Registers</h3>
           </div>
-        </section>
+
+          <div class="coa-table-wrapper">
+            <table class="coa-registers-table">
+              <thead>
+                <tr>
+                  <th class="col-reg"></th>
+                  <th class="col-freezer">Freezer</th>
+                  <th class="col-chiller">Chiller</th>
+                  <th class="col-ambient">Ambient</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="reg-name">R0 = Target</td>
+                  <td id="tbl-freezer-r0">-20.00</td>
+                  <td id="tbl-chiller-r0">4.00</td>
+                  <td id="tbl-ambient-r0">25.00</td>
+                </tr>
+                <tr>
+                  <td class="reg-name">R1 = Current</td>
+                  <td id="tbl-freezer-r1">-19.65</td>
+                  <td id="tbl-chiller-r1">4.35</td>
+                  <td id="tbl-ambient-r1">25.35</td>
+                </tr>
+                <tr>
+                  <td class="reg-name">R2 = Error</td>
+                  <td id="tbl-freezer-r2">0.35</td>
+                  <td id="tbl-chiller-r2">0.35</td>
+                  <td id="tbl-ambient-r2">0.35</td>
+                </tr>
+                <tr>
+                  <td class="reg-name">R3 = Control</td>
+                  <td id="tbl-freezer-r3">0 (OFF)</td>
+                  <td id="tbl-chiller-r3">0 (OFF)</td>
+                  <td id="tbl-ambient-r3">0 (OFF)</td>
+                </tr>
+                <tr>
+                  <td class="reg-name">R4 = Energy</td>
+                  <td id="tbl-freezer-r4">0.15 kWh</td>
+                  <td id="tbl-chiller-r4">0.10 kWh</td>
+                  <td id="tbl-ambient-r4">0.15 kWh</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Inventory Management Panel -->
+        <div class="bottom-panel inv-management-panel">
+          <div class="bottom-panel-header">
+            <div class="panel-icon-doc">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+            </div>
+            <h3 class="bottom-panel-title">Inventory Management</h3>
+          </div>
+
+          <div class="inv-management-body">
+            <div class="inv-stat-line">
+              <span class="inv-stat-label">Total Batches:</span>
+              <span id="inv-total-batches" class="inv-stat-value">4</span>
+            </div>
+
+            <div class="inv-earliest-section">
+              <div class="inv-earliest-heading">Earliest Expiring Batch:</div>
+              <div id="inv-earliest-card" class="inv-earliest-card">
+                Batch ID: <strong id="fefo-batch-id">B002</strong> | 
+                Product: <strong id="fefo-product-name">Yogurt</strong> | 
+                Quantity: <strong id="fefo-quantity">30</strong> | 
+                Expiry: <strong id="fefo-expiry">2026-08-25</strong> | 
+                Zone: <strong id="fefo-zone">Chiller</strong>
+              </div>
+            </div>
+          </div>
+        </div>
 
       </div>
 
-      <!-- Contextual Batch Inspector Drawer (Right Side) -->
-      <aside id="batch-inspector-drawer" class="panel-card" style="width:340px; display:none; align-self:flex-start; pointer-events:auto;">
-        <div class="card-header">
-          <div>
-            <span class="card-title">Batch Inspector</span>
-            <span id="inspect-fefo-tag" class="tag tag-warning" style="margin-left:6px; display:none;">NEXT FEFO</span>
-          </div>
-          <button class="btn btn-secondary modal-close" style="padding:2px 8px; font-size:11px;" type="button">✕</button>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:8px; font-size:13px;">
-          <div><span style="color:var(--muted);">Batch ID:</span> <strong id="inspect-batch-id">--</strong></div>
-          <div><span style="color:var(--muted);">Product Name:</span> <strong id="inspect-product-name">--</strong></div>
-          <div><span style="color:var(--muted);">Quantity:</span> <strong id="inspect-quantity">--</strong></div>
-          <div><span style="color:var(--muted);">Storage Zone:</span> <strong id="inspect-zone">--</strong></div>
-          <div><span style="color:var(--muted);">Expiry Date:</span> <strong id="inspect-expiry">--</strong></div>
-          <div><span style="color:var(--muted);">Status:</span> <span id="inspect-days-left" class="tag tag-normal">--</span></div>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:8px; margin-top:14px;">
-          <div style="display:flex; gap:8px;">
-            <button id="btn-inspect-focus" class="btn btn-secondary" style="flex:1;">Focus in 3D</button>
-            <button id="btn-inspect-edit-qty" class="btn btn-secondary" style="flex:1;">Edit Qty</button>
-          </div>
-          <div style="display:flex; gap:8px;">
-            <button id="btn-inspect-delete" class="btn btn-secondary" style="flex:1; border-color:rgba(239,68,68,0.4); color:var(--rose);">Delete</button>
-            <button id="btn-inspect-dispatch" class="btn btn-amber" style="flex:1;">Dispatch</button>
-          </div>
-        </div>
-      </aside>
+    </section>
 
-      <!-- Contextual Zone Diagnostics Drawer (Right Side) -->
-      <aside id="zone-inspector-drawer" class="panel-card" style="width:360px; display:none; align-self:flex-start; pointer-events:auto;">
-        <div class="card-header">
-          <span id="zone-inspect-title" class="card-title">Zone Diagnostics</span>
-          <button class="btn btn-secondary modal-close" style="padding:2px 8px; font-size:11px;" type="button">✕</button>
-        </div>
-        <div style="display:flex; flex-direction:column; gap:8px; font-size:13px; margin-bottom:12px;">
-          <div style="display:flex; justify-content:space-between;">
-            <span style="color:var(--muted);">Current Temperature:</span>
-            <strong id="zone-inspect-temp" style="color:var(--cyan); font-size:15px;">--</strong>
-          </div>
-          <div style="display:flex; justify-content:space-between;">
-            <span style="color:var(--muted);">Target Temperature:</span>
-            <strong id="zone-inspect-target">--</strong>
-          </div>
-          <div style="display:flex; justify-content:space-between;">
-            <span style="color:var(--muted);">Zone Condition:</span>
-            <strong id="zone-inspect-status">--</strong>
-          </div>
-          <div style="display:flex; justify-content:space-between;">
-            <span style="color:var(--muted);">Cooling Compressor:</span>
-            <strong id="zone-inspect-compressor">--</strong>
-          </div>
-        </div>
+  </div>
 
-        <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:10px;">
-          <div style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">COA Hardware Register Bank</div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; font-family:monospace; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px; border:1px solid var(--line);">
-            <div>R0 (Target): <span id="reg-r0" style="color:var(--cyan);">--</span></div>
-            <div>R1 (Current): <span id="reg-r1" style="color:var(--cyan);">--</span></div>
-            <div>R2 (Error): <span id="reg-r2" style="color:var(--amber);">--</span></div>
-            <div>R3 (Control): <span id="reg-r3">--</span></div>
-            <div style="grid-column:1/3;">R4 (Energy Cumulative): <span id="reg-r4" style="color:var(--emerald);">--</span></div>
-          </div>
-        </div>
-      </aside>
+  <!-- Hidden/Legacy compatibility containers (required by existing twinController logic) -->
+  <div style="display:none;" aria-hidden="true">
+    <div id="zone-cards-container"></div>
+    <span id="total-units-count">0</span>
+  </div>
 
-    </main>
+  <!-- Drawer: Contextual Batch Inspector -->
+  <aside id="batch-inspector-drawer" class="panel-card inspector-drawer" style="display:none;">
+    <div class="card-header">
+      <div>
+        <span class="card-title">Batch Inspector</span>
+        <span id="inspect-fefo-tag" class="tag tag-warning" style="margin-left:6px; display:none;">NEXT FEFO</span>
+      </div>
+      <button class="btn btn-secondary modal-close" style="padding:2px 8px; font-size:11px;" type="button">✕</button>
+    </div>
+    <div class="inspector-fields">
+      <div><span class="field-label">Batch ID:</span> <strong id="inspect-batch-id">--</strong></div>
+      <div><span class="field-label">Product Name:</span> <strong id="inspect-product-name">--</strong></div>
+      <div><span class="field-label">Quantity:</span> <strong id="inspect-quantity">--</strong></div>
+      <div><span class="field-label">Storage Zone:</span> <strong id="inspect-zone">--</strong></div>
+      <div><span class="field-label">Expiry Date:</span> <strong id="inspect-expiry">--</strong></div>
+      <div><span class="field-label">Status:</span> <span id="inspect-days-left" class="tag tag-normal">--</span></div>
+    </div>
+    <div class="inspector-buttons">
+      <div style="display:flex; gap:8px;">
+        <button id="btn-inspect-focus" class="btn btn-secondary" style="flex:1;">Focus in 3D</button>
+        <button id="btn-inspect-edit-qty" class="btn btn-secondary" style="flex:1;">Edit Qty</button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="btn-inspect-delete" class="btn btn-secondary btn-danger" style="flex:1;">Delete</button>
+        <button id="btn-inspect-dispatch" class="btn btn-action-amber" style="flex:1;">Dispatch</button>
+      </div>
+    </div>
+  </aside>
 
-    <!-- Camera Navigation Presets Bar -->
-    <nav class="camera-controls">
-      <button class="camera-btn active" data-camera="overview">Warehouse Overview</button>
-      <button class="camera-btn" data-camera="freezer">Freezer Zone (-20°C)</button>
-      <button class="camera-btn" data-camera="chiller">Chiller Zone (4°C)</button>
-      <button class="camera-btn" data-camera="ambient">Ambient Zone (25°C)</button>
-      <button class="camera-btn" data-camera="dock">Dispatch Dock</button>
-    </nav>
-
-    <!-- Real-time 3D Engine Metrics Badge -->
-    <div id="engine-perf-hud" class="status-pill" style="position:fixed; bottom:16px; right:16px; z-index:100; font-size:11px; background:rgba(10,15,26,0.88); backdrop-filter:blur(8px); border:1px solid var(--line); pointer-events:none;">
-      <span style="color:var(--cyan); font-weight:600;">⚡ 3D Engine:</span>
-      <span id="fps-counter-badge" style="font-family:monospace;">60 FPS | 14,800 Polys</span>
+  <!-- Drawer: Contextual Zone Diagnostics -->
+  <aside id="zone-inspector-drawer" class="panel-card inspector-drawer" style="display:none;">
+    <div class="card-header">
+      <span id="zone-inspect-title" class="card-title">Zone Diagnostics</span>
+      <button class="btn btn-secondary modal-close" style="padding:2px 8px; font-size:11px;" type="button">✕</button>
+    </div>
+    <div class="inspector-fields">
+      <div style="display:flex; justify-content:space-between;">
+        <span class="field-label">Current Temperature:</span>
+        <strong id="zone-inspect-temp" style="color:var(--cyan); font-size:15px;">--</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between;">
+        <span class="field-label">Target Temperature:</span>
+        <strong id="zone-inspect-target">--</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between;">
+        <span class="field-label">Zone Condition:</span>
+        <strong id="zone-inspect-status">--</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between;">
+        <span class="field-label">Cooling Compressor:</span>
+        <strong id="zone-inspect-compressor">--</strong>
+      </div>
     </div>
 
+    <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:10px;">
+      <div style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">COA Hardware Register Bank</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; font-family:monospace; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px; border:1px solid var(--line);">
+        <div>R0 (Target): <span id="reg-r0" style="color:var(--cyan);">--</span></div>
+        <div>R1 (Current): <span id="reg-r1" style="color:var(--cyan);">--</span></div>
+        <div>R2 (Error): <span id="reg-r2" style="color:var(--amber);">--</span></div>
+        <div>R3 (Control): <span id="reg-r3">--</span></div>
+        <div style="grid-column:1/3;">R4 (Energy Cumulative): <span id="reg-r4" style="color:var(--emerald);">--</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Modal: Full Inventory Management View -->
+  <div id="modal-inventory-full" class="modal-overlay">
+    <div class="modal-dialog" style="width:780px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">Warehouse Inventory Management</h3>
+          <span style="font-size:11px; color:var(--muted);">FEFO-Algorithmic Storage & Live Perishable Batches</span>
+        </div>
+        <button class="btn btn-secondary modal-close" type="button">✕</button>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="display:flex; gap:10px; align-items:center;">
+          <input id="inv-search-input" type="text" class="form-input" placeholder="Filter batch or product..." style="width:240px; padding:6px 10px; font-size:12px;">
+          <span style="font-size:12px; color:var(--muted);">Total: <strong id="modal-total-units">0</strong> units</span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button id="btn-modal-add-batch" class="btn btn-action-blue" type="button">+ Inbound Batch</button>
+          <button id="btn-modal-dispatch-fefo" class="btn btn-action-amber" type="button">⚡ Dispatch Next FEFO</button>
+        </div>
+      </div>
+
+      <div id="inventory-list" class="inventory-list-table-wrap" style="max-height:360px; overflow-y:auto;">
+        <div style="font-size:12px; color:var(--muted); padding:10px;">Loading inventory records from Supabase...</div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+        <button class="btn btn-secondary modal-close" type="button">Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- Modal: Add Perishable Batch -->

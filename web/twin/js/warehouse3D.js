@@ -1,22 +1,20 @@
 /**
- * ColdFlow 3D Warehouse Digital Twin Engine (Stage 4 & 5)
+ * ColdFlow 3D Warehouse Digital Twin Engine
  *
  * Implements:
- * 1. Industrial Cold-Storage Facility Architecture (Heavy-duty steel teardrop racks,
- *    concrete epoxy floor, ceiling steel trusses, high-bay industrial LED lights,
- *    loading docks, rolling shutter doors, insulated refrigeration pipes).
- * 2. Distinct Environmental Zones:
- *    - Freezer (-20°C): Volumetric sub-zero cold vapor particles, frost-dusted metal, cold blue point lights.
- *    - Chiller (4°C): Fresh chilled atmosphere, dairy/produce crates, emerald status lighting.
- *    - Ambient (25°C): Staging area, warm industrial lighting, dry goods pallets.
- * 3. Detailed Pallets & Carton Packaging: Euro-pallets with wooden deckboards,
- *    corrugated boxes with procedural shipping labels and live batch stamps.
- * 4. Autonomous Guided Vehicle (AGV / Forklift) Simulation:
- *    Heavy industrial AGV with flashing amber safety strobe, dual lift forks, and
- *    smooth physics-based waypoint navigation along warehouse aisles during real
- *    inbound batch intake and FEFO dispatch operations.
- * 5. Interactive 3D Raycasting: Pallets, racks, IoT sensors (SENSOR01-09), and zones.
- * 6. Dynamic Cooling Fans & Particle Vapor Emitters reacting to live compressor state.
+ * 1. Industrial 3-Chamber Cold-Chain Architecture (Freezer, Chiller, Ambient)
+ *    matching the high-fidelity reference design.
+ * 2. Neon-illuminated entrance arches and glowing floor perimeters for each chamber:
+ *    - Freezer: Cyber Cyan / Sub-Zero Neon Blue (#00f0ff)
+ *    - Chiller: Emerald / High-Luminance Neon Green (#00ff66)
+ *    - Ambient: Vibrant Neon Red / Amber (#ff2a5f)
+ * 3. Overhead illuminated chamber identification signage ("FREEZER", "CHILLER", "AMBIENT").
+ * 4. Multi-fan industrial refrigeration condenser units on back walls with live spinning rotors.
+ * 5. Industrial heavy-duty pallet racks loaded with zone-appropriate goods and live database batches.
+ * 6. Polished epoxy floor with yellow AGV guidance tracks, safety barriers, and service doors.
+ * 7. Autonomous Guided Vehicle (AGV) with flashing amber beacon and smooth dispatch trajectory.
+ * 8. 9 IoT Environmental Sensors (SENSOR01-09) with interactive raycasting.
+ * 9. Sub-zero vapor particles reacting dynamically to compressor cooling state.
  */
 
 class Warehouse3D {
@@ -34,8 +32,9 @@ class Warehouse3D {
     this.zoneObjects = {};
     this.palletMeshes = new Map();     // batchId -> Group
     this.sensorNodes = new Map();      // sensorId -> Mesh
-    this.coolingFans = [];
-    this.vaporEmitters = [];
+    this.stockPalletMap = new Map();   // slotId -> Group
+    this.coolingFans = [];             // { fan, zone }
+    this.vaporEmitters = [];           // { points, zone, count }
     this.agvVehicle = null;
 
     this.clock = new THREE.Clock();
@@ -50,43 +49,49 @@ class Warehouse3D {
   init() {
     // 1. Scene setup
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x060911);
-    this.scene.fog = new THREE.FogExp2(0x060911, 0.018);
+    this.scene.background = new THREE.Color(0x060b14);
+    this.scene.fog = new THREE.FogExp2(0x060b14, 0.014);
 
-    // 2. Camera setup
-    const aspect = this.container.clientWidth / this.container.clientHeight;
-    this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 200);
-    this.camera.position.set(0, 15, 24);
+    // 2. Camera setup matching the isometric elevated perspective in reference image
+    const w = this.container.clientWidth || 1200;
+    const h = this.container.clientHeight || 500;
+    const aspect = w / h;
+    this.camera = new THREE.PerspectiveCamera(40, aspect, 0.1, 200);
+    this.camera.position.set(0, 14.5, 23.5);
 
     // 3. Renderer setup
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: "high-performance",
+      alpha: false
+    });
+    this.renderer.setSize(w, h);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.15;
     this.container.appendChild(this.renderer.domElement);
 
     // 4. Orbit Controls
     this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.maxPolarAngle = Math.PI / 2 - 0.03; // Don't clip through floor
-    this.controls.minDistance = 3;
-    this.controls.maxDistance = 55;
-    this.controls.target.set(0, 2, 0);
+    this.controls.maxPolarAngle = Math.PI / 2 - 0.02; // Prevent floor clipping
+    this.controls.minDistance = 4;
+    this.controls.maxDistance = 60;
+    this.controls.target.set(0, 2.2, 0);
 
-    // 5. Generate Procedural Textures
+    // 5. Generate Textures
     this.generateProceduralTextures();
 
     // 6. Lighting Pipeline
     this.setupLighting();
 
-    // 7. Build Industrial Warehouse
+    // 7. Build Architecture
     this.buildWarehouseArchitecture();
 
-    // 8. Build AGV Autonomous Vehicle
+    // 8. Build AGV Autonomous Forklift
     this.buildAGV();
 
     // 9. Event Listeners
@@ -98,29 +103,30 @@ class Warehouse3D {
   }
 
   generateProceduralTextures() {
-    // 1. Concrete floor epoxy grid texture
+    // 1. Polished industrial floor with subtle grid lines
     const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = 512;
+    canvas.width = 1024;
+    canvas.height = 1024;
     const ctx = canvas.getContext("2d");
 
-    ctx.fillStyle = "#111827";
-    ctx.fillRect(0, 0, 512, 512);
+    // Base concrete dark tone
+    ctx.fillStyle = "#0c1526";
+    ctx.fillRect(0, 0, 1024, 1024);
 
-    // Subtle concrete noise
-    ctx.fillStyle = "rgba(255, 255, 255, 0.02)";
-    for (let i = 0; i < 2000; i++) {
-      ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+    // Subtle noise
+    ctx.fillStyle = "rgba(255, 255, 255, 0.015)";
+    for (let i = 0; i < 4000; i++) {
+      ctx.fillRect(Math.random() * 1024, Math.random() * 1024, 2, 2);
     }
 
-    // Grid tile lines
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+    // Grid joint lines
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
     ctx.lineWidth = 2;
-    for (let x = 0; x <= 512; x += 64) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 512); ctx.stroke();
+    for (let x = 0; x <= 1024; x += 128) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 1024); ctx.stroke();
     }
-    for (let y = 0; y <= 512; y += 64) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke();
+    for (let y = 0; y <= 1024; y += 128) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1024, y); ctx.stroke();
     }
 
     const floorTex = new THREE.CanvasTexture(canvas);
@@ -129,43 +135,43 @@ class Warehouse3D {
     floorTex.repeat.set(6, 4);
     this.textures.floor = floorTex;
 
-    // 2. Hazard safety striped texture
+    // 2. Yellow Hazard Striping
     const hazardCanvas = document.createElement("canvas");
-    hazardCanvas.width = 128;
-    hazardCanvas.height = 128;
+    hazardCanvas.width = 256;
+    hazardCanvas.height = 256;
     const hctx = hazardCanvas.getContext("2d");
     hctx.fillStyle = "#eab308";
-    hctx.fillRect(0, 0, 128, 128);
+    hctx.fillRect(0, 0, 256, 256);
     hctx.fillStyle = "#18181b";
-    for (let i = -128; i < 256; i += 32) {
+    for (let i = -256; i < 512; i += 48) {
       hctx.beginPath();
       hctx.moveTo(i, 0);
-      hctx.lineTo(i + 16, 0);
-      hctx.lineTo(i - 16, 128);
-      hctx.lineTo(i - 32, 128);
+      hctx.lineTo(i + 24, 0);
+      hctx.lineTo(i - 24, 256);
+      hctx.lineTo(i - 48, 256);
       hctx.fill();
     }
     const hazardTex = new THREE.CanvasTexture(hazardCanvas);
     hazardTex.wrapS = THREE.RepeatWrapping;
     hazardTex.wrapT = THREE.RepeatWrapping;
-    hazardTex.repeat.set(8, 1);
+    hazardTex.repeat.set(10, 1);
     this.textures.hazard = hazardTex;
   }
 
   setupLighting() {
-    // Ambient light
-    const ambLight = new THREE.AmbientLight(0x0f172a, 1.4);
+    // Ambient illumination
+    const ambLight = new THREE.AmbientLight(0x131f37, 1.4);
     this.scene.add(ambLight);
 
-    // Main warehouse overhead directional sunlight
-    const mainSun = new THREE.DirectionalLight(0xf8fafc, 1.6);
-    mainSun.position.set(8, 22, 16);
+    // Main Directional Sun Light (casting realistic soft shadows)
+    const mainSun = new THREE.DirectionalLight(0xf1f5f9, 1.6);
+    mainSun.position.set(10, 24, 18);
     mainSun.castShadow = true;
     mainSun.shadow.mapSize.width = 2048;
     mainSun.shadow.mapSize.height = 2048;
     mainSun.shadow.camera.near = 0.5;
-    mainSun.shadow.camera.far = 70;
-    const d = 18;
+    mainSun.shadow.camera.far = 80;
+    const d = 22;
     mainSun.shadow.camera.left = -d;
     mainSun.shadow.camera.right = d;
     mainSun.shadow.camera.top = d;
@@ -173,462 +179,526 @@ class Warehouse3D {
     mainSun.shadow.bias = -0.0003;
     this.scene.add(mainSun);
 
-    // Zone 1: Sub-zero Blue Cold illumination (Freezer, X = -6)
-    const freezerLight = new THREE.PointLight(0x38bdf8, 2.4, 15);
-    freezerLight.position.set(-6, 5.5, 0);
+    // Subtle fill light from front-left
+    const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.4);
+    fillLight.position.set(-15, 12, 10);
+    this.scene.add(fillLight);
+
+    // Dedicated interior zone lights
+    // Zone 1: Sub-zero Blue Cold illumination (Freezer, X = -7.2)
+    const freezerLight = new THREE.PointLight(0x38bdf8, 2.6, 18);
+    freezerLight.position.set(-7.2, 5.0, 0);
     this.scene.add(freezerLight);
 
     // Zone 2: Fresh Refrigerated Green illumination (Chiller, X = 0)
-    const chillerLight = new THREE.PointLight(0x10b981, 1.8, 14);
-    chillerLight.position.set(0, 5.5, 0);
+    const chillerLight = new THREE.PointLight(0x22c55e, 2.2, 18);
+    chillerLight.position.set(0, 5.0, 0);
     this.scene.add(chillerLight);
 
-    // Zone 3: Warm Industrial Warehouse illumination (Ambient, X = +6)
-    const ambientLight = new THREE.PointLight(0xf59e0b, 1.6, 14);
-    ambientLight.position.set(6, 5.5, 0);
+    // Zone 3: Warm Industrial Warehouse illumination (Ambient, X = +7.2)
+    const ambientLight = new THREE.PointLight(0xef4444, 2.0, 18);
+    ambientLight.position.set(7.2, 5.0, 0);
     this.scene.add(ambientLight);
 
-    // High-bay pendant lights
-    const pendantPositions = [
-      [-6, 7.5, 4], [0, 7.5, 4], [6, 7.5, 4],
-      [-6, 7.5, -2], [0, 7.5, -2], [6, 7.5, -2]
-    ];
-    pendantPositions.forEach(([px, py, pz]) => {
-      const pLight = new THREE.PointLight(0xffedd5, 0.6, 8);
-      pLight.position.set(px, py, pz);
+    // Apron high-bay lights
+    [-7.2, 0, 7.2].forEach((px) => {
+      const pLight = new THREE.PointLight(0xffeedd, 0.7, 12);
+      pLight.position.set(px, 7.5, 6.5);
       this.scene.add(pLight);
     });
   }
 
   buildWarehouseArchitecture() {
-    // 1. Industrial Concrete Epoxy Floor
-    const floorGeo = new THREE.PlaneGeometry(32, 22);
+    // 1. Industrial Concrete Epoxy Floor (Main Base)
+    const floorGeo = new THREE.PlaneGeometry(36, 26);
     const floorMat = new THREE.MeshStandardMaterial({
       map: this.textures.floor,
-      roughness: 0.5,
-      metalness: 0.25
+      roughness: 0.45,
+      metalness: 0.2
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     this.scene.add(floor);
 
-    // 2. Yellow AGV / Forklift Guide Track along main aisle (Z = 4.0)
-    const trackGeo = new THREE.PlaneGeometry(28, 0.4);
-    const trackMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
-    const track = new THREE.Mesh(trackGeo, trackMat);
-    track.rotation.x = -Math.PI / 2;
-    track.position.set(0, 0.01, 4.0);
-    this.scene.add(track);
+    // 2. Main Yellow AGV Guidance Lanes on Apron
+    const trackMat = new THREE.MeshBasicMaterial({ color: 0xeab308 });
+    const mainAisleTrack = new THREE.Mesh(new THREE.PlaneGeometry(28, 0.35), trackMat);
+    mainAisleTrack.rotation.x = -Math.PI / 2;
+    mainAisleTrack.position.set(0, 0.015, 6.2);
+    this.scene.add(mainAisleTrack);
 
-    // Hazard crosshatch border along loading dock (Z = 7.5)
-    const hazardGeo = new THREE.PlaneGeometry(28, 0.6);
+    // Spur branches leading into each chamber
+    [-7.2, 0, 7.2].forEach((tx) => {
+      const spurTrack = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 6.0), trackMat);
+      spurTrack.rotation.x = -Math.PI / 2;
+      spurTrack.position.set(tx, 0.016, 3.2);
+      this.scene.add(spurTrack);
+    });
+
+    // 3. Staging dock line with hazard crosshatch at Z = 8.8
+    const hazardGeo = new THREE.PlaneGeometry(30, 0.5);
     const hazardMat = new THREE.MeshBasicMaterial({ map: this.textures.hazard });
     const hazardLine = new THREE.Mesh(hazardGeo, hazardMat);
     hazardLine.rotation.x = -Math.PI / 2;
-    hazardLine.position.set(0, 0.015, 6.8);
+    hazardLine.position.set(0, 0.02, 8.8);
     this.scene.add(hazardLine);
 
-    // 3. Back Warehouse Insulated Wall with structural columns
-    const wallGeo = new THREE.PlaneGeometry(32, 10);
-    const wallMat = new THREE.MeshStandardMaterial({
-      color: 0x0f172a,
-      roughness: 0.85
+    // 4. Back Continuous Insulated Wall
+    const backWallMat = new THREE.MeshStandardMaterial({
+      color: 0x111c30,
+      roughness: 0.75,
+      metalness: 0.2
     });
-    const wall = new THREE.Mesh(wallGeo, wallMat);
-    wall.position.set(0, 5, -5.5);
-    wall.receiveShadow = true;
-    this.scene.add(wall);
+    const backWallGeo = new THREE.BoxGeometry(34, 8.5, 0.3);
+    const backWall = new THREE.Mesh(backWallGeo, backWallMat);
+    backWall.position.set(0, 4.25, -5.2);
+    backWall.receiveShadow = true;
+    this.scene.add(backWall);
 
-    // Left and right side walls
-    const sideWallGeo = new THREE.PlaneGeometry(22, 10);
-    const leftWall = new THREE.Mesh(sideWallGeo, wallMat);
-    leftWall.rotation.y = Math.PI / 2;
-    leftWall.position.set(-16, 5, 5.5);
+    // Side Exterior Walls
+    const sideWallGeo = new THREE.BoxGeometry(0.3, 8.5, 18);
+    const leftWall = new THREE.Mesh(sideWallGeo, backWallMat);
+    leftWall.position.set(-15.5, 4.25, 3.8);
     leftWall.receiveShadow = true;
     this.scene.add(leftWall);
 
-    const rightWall = new THREE.Mesh(sideWallGeo, wallMat);
-    rightWall.rotation.y = -Math.PI / 2;
-    rightWall.position.set(16, 5, 5.5);
+    const rightWall = new THREE.Mesh(sideWallGeo, backWallMat);
+    rightWall.position.set(15.5, 4.25, 3.8);
     rightWall.receiveShadow = true;
     this.scene.add(rightWall);
 
-    // 4. Ceiling Steel Roof Trusses
-    const trussMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.4 });
-    const trussZ = [-4.0, 0.0, 4.0];
-    trussZ.forEach((tz) => {
-      const beamGeo = new THREE.BoxGeometry(32, 0.35, 0.25);
-      const beam = new THREE.Mesh(beamGeo, trussMat);
-      beam.position.set(0, 8.2, tz);
-      this.scene.add(beam);
-    });
-
-    // 5. Overhead Insulated Refrigeration Pipework
-    const pipeMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.9, roughness: 0.2 });
-    const pipeGeo = new THREE.CylinderGeometry(0.12, 0.12, 28, 12);
-    const pipe = new THREE.Mesh(pipeGeo, pipeMat);
-    pipe.rotation.z = Math.PI / 2;
-    pipe.position.set(0, 7.4, -4.6);
-    this.scene.add(pipe);
-
-    // 6. Build the Three Core Storage Zones
-    this.buildStorageZone("Freezer", -6.0, 0x0284c7, -20.0, true);
-    this.buildStorageZone("Chiller", 0.0, 0x059669, 4.0, false);
-    this.buildStorageZone("Ambient", 6.0, 0xd97706, 25.0, false);
-
-    // Shared insulated partition walls between the three compartments.
-    const partitionMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      roughness: 0.68,
-      metalness: 0.22
-    });
-    [-3.0, 3.0].forEach((px) => {
-      const partition = new THREE.Mesh(new THREE.BoxGeometry(0.28, 6.8, 7.6), partitionMat);
-      partition.position.set(px, 3.4, 0);
-      partition.castShadow = true;
-      partition.receiveShadow = true;
-      this.scene.add(partition);
-
-      const centerStrip = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.12, 7.5), new THREE.MeshStandardMaterial({
-        color: 0x64748b,
-        emissive: 0x334155,
-        emissiveIntensity: 0.25,
-        metalness: 0.6,
-        roughness: 0.35
-      }));
-      centerStrip.position.set(px, 6.75, 0);
-      this.scene.add(centerStrip);
-    });
-
-    // 7. Build IoT Sensor Nodes (SENSOR01-09)
-    this.buildSensorNodes();
-
-    // 8. Build Dispatch Dock Area (Z = 8.5)
-    this.buildDispatchDock();
-  }
-
-  createCoolingFan(zoneName, colorHex) {
-    const assembly = new THREE.Group();
-
-    const housingMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      metalness: 0.85,
-      roughness: 0.28
-    });
-    const bladeMat = new THREE.MeshStandardMaterial({
-      color: colorHex,
-      emissive: colorHex,
-      emissiveIntensity: 0.12,
-      metalness: 0.72,
-      roughness: 0.24,
-      side: THREE.DoubleSide
-    });
-
-    // Thick circular shroud with a recessed rear drum.
-    const housing = new THREE.Mesh(
-      new THREE.TorusGeometry(0.58, 0.105, 12, 32),
-      housingMat
-    );
-    housing.position.z = 0.03;
-    assembly.add(housing);
-
-    const rearDrum = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.54, 0.54, 0.16, 32),
-      housingMat
-    );
-    rearDrum.rotation.x = Math.PI / 2;
-    rearDrum.position.z = -0.06;
-    assembly.add(rearDrum);
-
-    // 6 broad, swept impeller blades. ShapeGeometry extrusion gives them thickness
-    // and a recognizable curved industrial-fan profile instead of a flat disc.
-    const rotor = new THREE.Group();
-    const bladeShape = new THREE.Shape();
-    bladeShape.moveTo(0.09, 0.04);
-    bladeShape.bezierCurveTo(0.22, 0.10, 0.43, 0.16, 0.50, 0.38);
-    bladeShape.bezierCurveTo(0.55, 0.54, 0.38, 0.64, 0.20, 0.54);
-    bladeShape.bezierCurveTo(0.10, 0.48, 0.03, 0.27, 0.09, 0.04);
-
-    const bladeGeo = new THREE.ExtrudeGeometry(bladeShape, {
-      depth: 0.055,
-      bevelEnabled: true,
-      bevelSegments: 2,
-      bevelSize: 0.018,
-      bevelThickness: 0.012,
-      curveSegments: 12
-    });
-    for (let i = 0; i < 6; i++) {
-      const blade = new THREE.Mesh(bladeGeo, bladeMat);
-      blade.rotation.z = i * Math.PI / 3;
-      blade.position.z = 0.09;
-      blade.castShadow = true;
-      rotor.add(blade);
-    }
-
-    const hub = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.16, 0.20, 0.16, 24),
-      bladeMat
-    );
-    hub.rotation.x = Math.PI / 2;
-    hub.position.z = 0.16;
-    hub.castShadow = true;
-    rotor.add(hub);
-    assembly.add(rotor);
-
-    // Protective grille fixed in front of the rotor.
-    const grilleMat = new THREE.MeshStandardMaterial({
-      color: 0x94a3b8,
-      metalness: 0.95,
-      roughness: 0.20
-    });
-    const grilleCenter = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.105, 0.105, 0.025, 20),
-      grilleMat
-    );
-    grilleCenter.rotation.x = Math.PI / 2;
-    grilleCenter.position.z = 0.20;
-    assembly.add(grilleCenter);
-
-    for (let i = 0; i < 8; i++) {
-      const spoke = new THREE.Mesh(
-        new THREE.BoxGeometry(0.018, 1.08, 0.018),
-        grilleMat
-      );
-      spoke.position.z = 0.19;
-      spoke.rotation.z = i * Math.PI / 8;
-      assembly.add(spoke);
-    }
-
-    assembly.userData.zoneName = zoneName;
-    assembly.userData.impeller = rotor;
-    return { assembly, impeller: rotor };
-  }
-
-  buildStorageZone(zoneName, xPos, colorHex, targetTemp, isFreezer) {
-    const zoneGroup = new THREE.Group();
-    zoneGroup.position.set(xPos, 0, 0);
-
-    // 1. Zoned Floor Platform
-    const platformGeo = new THREE.BoxGeometry(5.2, 0.05, 7.6);
-    const platformMat = new THREE.MeshStandardMaterial({
-      color: isFreezer ? 0x0f2338 : (zoneName === "Chiller" ? 0x123027 : 0x33291a),
-      roughness: 0.6,
-      metalness: 0.3
-    });
-    const platform = new THREE.Mesh(platformGeo, platformMat);
-    platform.position.y = 0.025;
-    platform.receiveShadow = true;
-    zoneGroup.add(platform);
-
-    // Color perimeter outline
-    const borderGeo = new THREE.EdgesGeometry(platformGeo);
-    const borderMat = new THREE.LineBasicMaterial({ color: colorHex, linewidth: 2 });
-    const border = new THREE.LineSegments(borderGeo, borderMat);
-    border.position.y = 0.03;
-    zoneGroup.add(border);
-
-    // 2. Insulated room envelope
-    const wallMat = new THREE.MeshStandardMaterial({
-      color: isFreezer ? 0x173552 : (zoneName === "Chiller" ? 0x16473b : 0x3f392b),
-      roughness: 0.72,
-      metalness: 0.18
-    });
-    const panelMat = new THREE.MeshStandardMaterial({
-      color: isFreezer ? 0x38bdf8 : (zoneName === "Chiller" ? 0x34d399 : 0xf59e0b),
-      emissive: colorHex,
-      emissiveIntensity: 0.18,
-      roughness: 0.55
-    });
-
-    const sideGeo = new THREE.BoxGeometry(0.18, 6.8, 7.6);
-    [-2.51, 2.51].forEach((sx) => {
-      const sideWall = new THREE.Mesh(sideGeo, wallMat);
-      sideWall.position.set(sx, 3.4, 0);
-      sideWall.castShadow = true;
-      sideWall.receiveShadow = true;
-      zoneGroup.add(sideWall);
-
-      // Insulated panel seams make the room boundary easy to read.
-      for (let pz = -2.8; pz <= 2.8; pz += 1.4) {
-        const seam = new THREE.Mesh(new THREE.BoxGeometry(0.025, 6.5, 0.025), panelMat);
-        seam.position.set(sx + (sx < 0 ? 0.095 : -0.095), 3.35, pz);
-        zoneGroup.add(seam);
+    // Architectural Columns along side walls
+    const colMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6, metalness: 0.4 });
+    [-15.3, 15.3].forEach((cx) => {
+      for (let cz = -4; cz <= 10; cz += 3.5) {
+        const col = new THREE.Mesh(new THREE.BoxGeometry(0.4, 8.5, 0.4), colMat);
+        col.position.set(cx, 4.25, cz);
+        this.scene.add(col);
       }
     });
 
-    const backWall = new THREE.Mesh(new THREE.BoxGeometry(5.2, 6.8, 0.18), wallMat);
-    backWall.position.set(0, 3.4, -3.71);
-    backWall.castShadow = true;
-    backWall.receiveShadow = true;
-    zoneGroup.add(backWall);
-
-    // Ceiling strip and entrance header identify the room as a separate compartment.
-    const ceilingStrip = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.16, 1.1), wallMat);
-    ceilingStrip.position.set(0, 6.55, -3.25);
-    ceilingStrip.castShadow = true;
-    zoneGroup.add(ceilingStrip);
-
-    const doorFrameMat = new THREE.MeshStandardMaterial({
-      color: 0x94a3b8,
-      metalness: 0.75,
-      roughness: 0.28
+    // 5. Partition Walls Between Chambers (at X = -3.6 and X = +3.6)
+    const partitionMat = new THREE.MeshStandardMaterial({
+      color: 0x16233b,
+      roughness: 0.7,
+      metalness: 0.2
     });
-    [-1.95, 1.95].forEach((dx) => {
-      const framePost = new THREE.Mesh(new THREE.BoxGeometry(0.16, 3.8, 0.16), doorFrameMat);
-      framePost.position.set(dx, 1.9, 3.83);
-      zoneGroup.add(framePost);
-    });
-    const doorHeader = new THREE.Mesh(new THREE.BoxGeometry(4.06, 0.16, 0.16), doorFrameMat);
-    doorHeader.position.set(0, 3.8, 3.83);
-    zoneGroup.add(doorHeader);
+    [-3.6, 3.6].forEach((px) => {
+      const part = new THREE.Mesh(new THREE.BoxGeometry(0.3, 7.2, 9.8), partitionMat);
+      part.position.set(px, 3.6, -0.3);
+      part.castShadow = true;
+      part.receiveShadow = true;
+      this.scene.add(part);
 
-    const threshold = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.06, 0.35), panelMat);
-    threshold.position.set(0, 0.04, 3.82);
-    zoneGroup.add(threshold);
-
-    // Label panel mounted above each room entrance.
-    const labelCanvas = document.createElement("canvas");
-    labelCanvas.width = 512;
-    labelCanvas.height = 128;
-    const labelCtx = labelCanvas.getContext("2d");
-    labelCtx.fillStyle = "#0b1120";
-    labelCtx.fillRect(0, 0, 512, 128);
-    labelCtx.strokeStyle = `#${colorHex.toString(16).padStart(6, "0")}`;
-    labelCtx.lineWidth = 10;
-    labelCtx.strokeRect(5, 5, 502, 118);
-    labelCtx.fillStyle = "#f8fafc";
-    labelCtx.font = "bold 42px sans-serif";
-    labelCtx.textAlign = "center";
-    labelCtx.fillText(`${zoneName.toUpperCase()}  |  ${targetTemp} C`, 256, 78);
-    const labelTexture = new THREE.CanvasTexture(labelCanvas);
-    const label = new THREE.Mesh(
-      new THREE.PlaneGeometry(3.4, 0.85),
-      new THREE.MeshBasicMaterial({ map: labelTexture, toneMapped: false })
-    );
-    label.position.set(0, 5.05, 3.78);
-    zoneGroup.add(label);
-
-    // 2. Heavy-Duty Industrial Pallet Racks (Safety Orange Beams & Royal Blue Uprights)
-    const uprightMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, metalness: 0.8, roughness: 0.3 }); // Industrial Blue
-    const beamMat = new THREE.MeshStandardMaterial({ color: 0xea580c, metalness: 0.7, roughness: 0.3 });    // Safety Orange
-
-    const rackW = 4.2;
-    const rackD = 2.6;
-    const rackH = 4.6;
-
-    // 4 Upright vertical column posts
-    const postGeo = new THREE.BoxGeometry(0.14, rackH, 0.14);
-    const halfW = rackW / 2;
-    const halfD = rackD / 2;
-    const posts = [
-      [-halfW, rackH / 2, -halfD], [halfW, rackH / 2, -halfD],
-      [-halfW, rackH / 2, halfD], [halfW, rackH / 2, halfD]
-    ];
-    posts.forEach(([px, py, pz]) => {
-      const post = new THREE.Mesh(postGeo, uprightMat);
-      post.position.set(px, py, pz);
-      post.castShadow = true;
-      zoneGroup.add(post);
+      // Clean top aluminum cap
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 9.8), new THREE.MeshStandardMaterial({
+        color: 0x64748b, metalness: 0.8, roughness: 0.2
+      }));
+      cap.position.set(px, 7.25, -0.3);
+      this.scene.add(cap);
     });
 
-    // Cross bracing between vertical posts
-    const braceMat = new THREE.LineBasicMaterial({ color: 0x60a5fa });
-    const braceGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(-halfW, 0.2, -halfD), new THREE.Vector3(-halfW, rackH, -halfD + 0.1),
-      new THREE.Vector3(halfW, 0.2, -halfD), new THREE.Vector3(halfW, rackH, -halfD + 0.1)
-    ]);
-    const braces = new THREE.LineSegments(braceGeo, braceMat);
-    zoneGroup.add(braces);
-
-    // 3 Horizontal Shelving Tiers (Y = 0.35, 1.80, 3.25)
-    const tierHeights = [0.35, 1.80, 3.25];
-    const beamGeo = new THREE.BoxGeometry(rackW, 0.12, rackD);
-    tierHeights.forEach((ty) => {
-      const shelf = new THREE.Mesh(beamGeo, beamMat);
-      shelf.position.set(0, ty, 0);
-      shelf.castShadow = true;
-      shelf.receiveShadow = true;
-      zoneGroup.add(shelf);
+    // 6. Overhead Steel Trusses above partition lines
+    const trussMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.3 });
+    [-4.0, 0.0, 4.0].forEach((tz) => {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(32, 0.3, 0.25), trussMat);
+      beam.position.set(0, 8.0, tz);
+      this.scene.add(beam);
     });
 
-    // 3. Roof-Mounted Evaporator Refrigeration Unit
-    const evapGeo = new THREE.BoxGeometry(2.8, 0.7, 1.4);
-    const evapMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.3 });
-    const evap = new THREE.Mesh(evapGeo, evapMat);
-    evap.position.set(0, 5.0, 0);
-    zoneGroup.add(evap);
+    // 7. BUILD THE THREE CORE STORAGE CHAMBERS
+    // Chamber 1: FREEZER (Left: X = -7.2, Color = Cyan 0x00f0ff)
+    this.buildStorageChamber("Freezer", -7.2, 0x00f0ff, 0x1d4ed8, -20.0, true);
 
-    // Dual industrial cooling fans with housings, swept blades, hubs and guards.
-    [-0.75, 0.75].forEach((fanX) => {
-      const fanModel = this.createCoolingFan(zoneName, colorHex);
-      fanModel.assembly.position.set(fanX, 5.0, 0.71);
-      zoneGroup.add(fanModel.assembly);
-      this.coolingFans.push({ fan: fanModel.impeller, zone: zoneName });
+    // Chamber 2: CHILLER (Center: X = 0.0, Color = Neon Green 0x00ff66)
+    this.buildStorageChamber("Chiller", 0.0, 0x00ff66, 0x15803d, 4.0, false);
+
+    // Chamber 3: AMBIENT (Right: X = +7.2, Color = Neon Red 0xff2a5f)
+    this.buildStorageChamber("Ambient", 7.2, 0xff2a5f, 0xb91c1c, 25.0, false);
+
+    // 8. Staging Safety Barriers with Metallic Railings in Front of Each Bay
+    this.buildSafetyBarriers();
+
+    // 9. Build 9 IoT Environmental Sensors
+    this.buildSensorNodes();
+  }
+
+  buildStorageChamber(zoneName, xPos, neonHex, darkThemeHex, targetTemp, isFreezer) {
+    const chamberGroup = new THREE.Group();
+    chamberGroup.position.set(xPos, 0, 0);
+
+    const roomW = 6.4;
+    const roomD = 9.4;
+    const roomH = 6.8;
+
+    // 1. Zoned Floor Slab with subtle zone tint
+    const slabMat = new THREE.MeshStandardMaterial({
+      color: isFreezer ? 0x0c1b30 : (zoneName === "Chiller" ? 0x0d241c : 0x241515),
+      roughness: 0.5,
+      metalness: 0.25
+    });
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(roomW - 0.3, 0.06, roomD - 0.2), slabMat);
+    slab.position.set(0, 0.03, -0.3);
+    slab.receiveShadow = true;
+    chamberGroup.add(slab);
+
+    // 2. GLOWING NEON ENTRANCE PORTAL & FLOOR PERIMETER
+    const neonMat = new THREE.MeshBasicMaterial({
+      color: neonHex,
+      toneMapped: false
+    });
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: neonHex,
+      transparent: true,
+      opacity: 0.38,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+      depthWrite: false
     });
 
-    // 4. Cold Vapor Particle Emitter for Freezer & Chiller
+    const portalZ = 4.4;
+    const portalH = 6.2;
+    const halfW = (roomW - 0.4) / 2;
+
+    // Helper to add neon tube with glow shell
+    const addNeonTube = (r, len, posX, posY, posZ, rotZ = 0, rotX = 0) => {
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8), neonMat);
+      core.position.set(posX, posY, posZ);
+      if (rotZ) core.rotation.z = rotZ;
+      if (rotX) core.rotation.x = rotX;
+      chamberGroup.add(core);
+
+      const halo = new THREE.Mesh(new THREE.CylinderGeometry(r * 2.2, r * 2.2, len, 8), glowMat);
+      halo.position.set(posX, posY, posZ);
+      if (rotZ) halo.rotation.z = rotZ;
+      if (rotX) halo.rotation.x = rotX;
+      chamberGroup.add(halo);
+    };
+
+    // Left vertical neon arch post
+    addNeonTube(0.04, portalH, -halfW, portalH / 2, portalZ);
+    // Right vertical neon arch post
+    addNeonTube(0.04, portalH, halfW, portalH / 2, portalZ);
+    // Top horizontal neon arch lintel
+    addNeonTube(0.04, roomW - 0.4, 0, portalH, portalZ, Math.PI / 2, 0);
+
+    // Glowing floor perimeter along left and right side walls
+    addNeonTube(0.025, roomD - 0.4, -halfW, 0.04, -0.3, 0, Math.PI / 2);
+    addNeonTube(0.025, roomD - 0.4, halfW, 0.04, -0.3, 0, Math.PI / 2);
+
+    // Front threshold neon strip
+    addNeonTube(0.03, roomW - 0.4, 0, 0.04, portalZ, Math.PI / 2, 0);
+
+    // 3. OVERHEAD ILLUMINATED SIGN BOX ("FREEZER", "CHILLER", "AMBIENT")
+    const signCanvas = document.createElement("canvas");
+    signCanvas.width = 512;
+    signCanvas.height = 140;
+    const sctx = signCanvas.getContext("2d");
+
+    const hexStr = `#${neonHex.toString(16).padStart(6, "0")}`;
+    sctx.fillStyle = "#070e1d";
+    sctx.fillRect(10, 10, 492, 120);
+
+    // Vibrant glowing border
+    sctx.strokeStyle = hexStr;
+    sctx.lineWidth = 10;
+    sctx.strokeRect(10, 10, 492, 120);
+
+    // Inner tint fill
+    sctx.fillStyle = hexStr === "#00f0ff" ? "rgba(0, 140, 255, 0.25)" : (hexStr === "#00ff66" ? "rgba(0, 200, 80, 0.25)" : "rgba(220, 30, 60, 0.25)");
+    sctx.fillRect(16, 16, 480, 108);
+
+    // Bold title text
+    sctx.fillStyle = "#ffffff";
+    sctx.font = "bold 64px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    sctx.textAlign = "center";
+    sctx.textBaseline = "middle";
+    sctx.fillText(zoneName.toUpperCase(), 256, 70);
+
+    const signTex = new THREE.CanvasTexture(signCanvas);
+    const signMat = new THREE.MeshBasicMaterial({ map: signTex, toneMapped: false });
+    const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 0.75), signMat);
+    signMesh.position.set(0, portalH + 0.5, portalZ + 0.02);
+    chamberGroup.add(signMesh);
+
+    // 4. BACK WALL SERVICE DOORS & CONDENSER UNIT
+    const doorFrameMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.3 });
+    const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(2.0, 3.2, 0.08), doorFrameMat);
+    doorFrame.position.set(0, 1.6, -4.95);
+    chamberGroup.add(doorFrame);
+
+    const doorLeafMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.5, roughness: 0.4 });
+    const doorLeafL = new THREE.Mesh(new THREE.BoxGeometry(0.9, 3.0, 0.06), doorLeafMat);
+    doorLeafL.position.set(-0.48, 1.6, -4.93);
+    chamberGroup.add(doorLeafL);
+    const doorLeafR = new THREE.Mesh(new THREE.BoxGeometry(0.9, 3.0, 0.06), doorLeafMat);
+    doorLeafR.position.set(0.48, 1.6, -4.93);
+    chamberGroup.add(doorLeafR);
+
+    // 5. INDUSTRIAL 4-FAN CONDENSER / EVAPORATOR UNIT MOUNTED ON BACK WALL
+    this.buildBackWallCondenser(chamberGroup, zoneName, neonHex);
+
+    // 6. BUILD STORAGE PALLET RACKS INSIDE CHAMBER
+    this.buildChamberRacks(chamberGroup, zoneName, isFreezer);
+
+    // 7. Cold vapor emitter for Freezer and Chiller
     if (isFreezer || zoneName === "Chiller") {
-      const vaporCount = 40;
+      const vaporCount = 50;
       const vaporGeo = new THREE.BufferGeometry();
       const positions = new Float32Array(vaporCount * 3);
       for (let i = 0; i < vaporCount * 3; i += 3) {
-        positions[i] = (Math.random() - 0.5) * 2.2;
-        positions[i + 1] = 4.8 - Math.random() * 2.5;
-        positions[i + 2] = 0.8 + Math.random() * 1.0;
+        positions[i] = (Math.random() - 0.5) * (roomW - 1.2);
+        positions[i + 1] = 4.5 - Math.random() * 2.8;
+        positions[i + 2] = -3.5 + Math.random() * 7.0;
       }
       vaporGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
       const vaporMat = new THREE.PointsMaterial({
         color: isFreezer ? 0xbae6fd : 0xa7f3d0,
-        size: 0.18,
+        size: 0.16,
         transparent: true,
-        opacity: 0.4,
+        opacity: 0.35,
         blending: THREE.AdditiveBlending
       });
       const vaporPoints = new THREE.Points(vaporGeo, vaporMat);
-      zoneGroup.add(vaporPoints);
+      chamberGroup.add(vaporPoints);
       this.vaporEmitters.push({ points: vaporPoints, zone: zoneName, count: vaporCount });
     }
 
-    // 5. Zone Signboard & Live Temperature Indicator Pole
-    const poleGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.5, 8);
-    const poleMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8 });
-    const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.set(0, 5.8, 0);
-    zoneGroup.add(pole);
-
-    const bulbGeo = new THREE.SphereGeometry(0.25, 16, 16);
+    // 8. Indicator bulb on portal header (clickable for zone diagnostics)
+    const bulbGeo = new THREE.SphereGeometry(0.18, 16, 16);
     const bulbMat = new THREE.MeshStandardMaterial({
-      color: colorHex,
-      emissive: colorHex,
-      emissiveIntensity: 0.9
+      color: neonHex,
+      emissive: neonHex,
+      emissiveIntensity: 0.8
     });
     const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-    bulb.position.set(0, 6.7, 0);
+    bulb.position.set(0, portalH + 0.95, portalZ);
     bulb.userData = { type: "indicatorBulb", zoneName: zoneName };
-    zoneGroup.add(bulb);
+    chamberGroup.add(bulb);
 
-    this.scene.add(zoneGroup);
+    this.scene.add(chamberGroup);
     this.zoneObjects[zoneName] = {
-      group: zoneGroup,
+      group: chamberGroup,
       bulb: bulb,
       targetTemp: targetTemp,
-      colorHex: colorHex
+      neonHex: neonHex
     };
   }
 
+  buildBackWallCondenser(parentGroup, zoneName, neonHex) {
+    const unitGroup = new THREE.Group();
+    unitGroup.position.set(0, 5.2, -4.75);
+
+    const unitW = 4.2;
+    const unitH = 1.1;
+    const unitD = 0.5;
+
+    const caseMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      metalness: 0.85,
+      roughness: 0.3
+    });
+    const casing = new THREE.Mesh(new THREE.BoxGeometry(unitW, unitH, unitD), caseMat);
+    casing.castShadow = true;
+    unitGroup.add(casing);
+
+    // Front trim strip in signature zone color
+    const trimMat = new THREE.MeshStandardMaterial({
+      color: neonHex,
+      emissive: neonHex,
+      emissiveIntensity: 0.25,
+      metalness: 0.5
+    });
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(unitW, 0.06, 0.02), trimMat);
+    trim.position.set(0, unitH / 2 - 0.04, unitD / 2 + 0.01);
+    unitGroup.add(trim);
+
+    // 4 circular fan ports
+    const fanPositions = [-1.4, -0.46, 0.46, 1.4];
+    const shroudMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.9, roughness: 0.2 });
+    const bladeMat = new THREE.MeshStandardMaterial({
+      color: 0x94a3b8,
+      metalness: 0.8,
+      roughness: 0.25,
+      side: THREE.DoubleSide
+    });
+
+    fanPositions.forEach((fx) => {
+      // Circular shroud
+      const shroud = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.04, 12, 24), shroudMat);
+      shroud.position.set(fx, 0, unitD / 2 + 0.02);
+      unitGroup.add(shroud);
+
+      // Rotating fan rotor with 4 blades
+      const rotor = new THREE.Group();
+      rotor.position.set(fx, 0, unitD / 2 + 0.03);
+
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 16), bladeMat);
+      hub.rotation.x = Math.PI / 2;
+      rotor.add(hub);
+
+      for (let b = 0; b < 4; b++) {
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.32, 0.015), bladeMat);
+        blade.position.y = 0.16;
+        const bladeHolder = new THREE.Group();
+        bladeHolder.rotation.z = (b * Math.PI) / 2;
+        bladeHolder.add(blade);
+        rotor.add(bladeHolder);
+      }
+
+      unitGroup.add(rotor);
+      this.coolingFans.push({ fan: rotor, zone: zoneName });
+
+      // Protective wire grille
+      const wireMat = new THREE.MeshBasicMaterial({ color: 0x64748b });
+      const wireH = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.01, 0.01), wireMat);
+      wireH.position.set(fx, 0, unitD / 2 + 0.05);
+      unitGroup.add(wireH);
+      const wireV = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.74, 0.01), wireMat);
+      wireV.position.set(fx, 0, unitD / 2 + 0.05);
+      unitGroup.add(wireV);
+    });
+
+    parentGroup.add(unitGroup);
+  }
+
+  buildChamberRacks(chamberGroup, zoneName, isFreezer) {
+    const uprightMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, metalness: 0.7, roughness: 0.3 });
+    const beamMat = new THREE.MeshStandardMaterial({ color: 0xea580c, metalness: 0.6, roughness: 0.35 });
+
+    // 3 parallel rack rows per chamber
+    const rowXPositions = [-1.85, 0.0, 1.85];
+    const rackDepth = 7.0;
+    const rackHeight = 4.6;
+    const tierHeights = [0.4, 1.75, 3.1];
+    const depthPositions = [-2.4, -0.8, 0.8, 2.4];
+
+    rowXPositions.forEach((rx, rIdx) => {
+      const rackGroup = new THREE.Group();
+      rackGroup.position.set(rx, 0, -0.4);
+
+      // Upright vertical posts (6 per rack row)
+      const postGeo = new THREE.BoxGeometry(0.08, rackHeight, 0.08);
+      const halfW = 0.6;
+      const halfD = rackDepth / 2;
+      const cornerOffsets = [
+        [-halfW, -halfD], [halfW, -halfD],
+        [-halfW, 0], [halfW, 0],
+        [-halfW, halfD], [halfW, halfD]
+      ];
+
+      cornerOffsets.forEach(([cx, cz]) => {
+        const post = new THREE.Mesh(postGeo, uprightMat);
+        post.position.set(cx, rackHeight / 2, cz);
+        post.castShadow = true;
+        rackGroup.add(post);
+      });
+
+      // Horizontal load beams across tiers
+      tierHeights.forEach((ty) => {
+        const shelfBeam = new THREE.Mesh(new THREE.BoxGeometry(halfW * 2 + 0.04, 0.08, rackDepth), beamMat);
+        shelfBeam.position.set(0, ty, 0);
+        shelfBeam.castShadow = true;
+        shelfBeam.receiveShadow = true;
+        rackGroup.add(shelfBeam);
+      });
+
+      // Prepopulate background storage pallets so racks look full and realistic
+      tierHeights.forEach((ty, tIdx) => {
+        depthPositions.forEach((pz, pIdx) => {
+          const slotId = `${zoneName}_${rIdx}_${tIdx}_${pIdx}`;
+          const stockPallet = this.createStockPalletMesh(zoneName, isFreezer, tIdx + pIdx + rIdx);
+          stockPallet.position.set(0, ty + 0.04, pz);
+          rackGroup.add(stockPallet);
+          this.stockPalletMap.set(slotId, stockPallet);
+        });
+      });
+
+      chamberGroup.add(rackGroup);
+    });
+  }
+
+  createStockPalletMesh(zoneName, isFreezer, seed) {
+    const palletGroup = new THREE.Group();
+
+    // Wooden pallet base
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 });
+    const palletBase = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.1, 0.95), woodMat);
+    palletBase.position.y = 0.05;
+    palletBase.castShadow = true;
+    palletGroup.add(palletBase);
+
+    // Palletized goods color scheme depending on zone
+    let boxColor = 0x0284c7;
+    if (zoneName === "Chiller") {
+      boxColor = seed % 2 === 0 ? 0x16a34a : 0xca8a04; // Green and yellow produce/dairy boxes
+    } else if (zoneName === "Ambient") {
+      boxColor = seed % 2 === 0 ? 0xd97706 : 0xb45309; // Corrugated cardboard cartons
+    } else {
+      boxColor = seed % 2 === 0 ? 0x0284c7 : 0x38bdf8; // Frozen cold goods
+    }
+
+    const boxMat = new THREE.MeshStandardMaterial({
+      color: boxColor,
+      roughness: 0.5,
+      metalness: 0.1
+    });
+
+    // 2-layer stacked cartons on pallet
+    const carton1 = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.45, 0.85), boxMat);
+    carton1.position.y = 0.32;
+    carton1.castShadow = true;
+    palletGroup.add(carton1);
+
+    const carton2 = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.4, 0.8), boxMat);
+    carton2.position.y = 0.72;
+    carton2.castShadow = true;
+    palletGroup.add(carton2);
+
+    return palletGroup;
+  }
+
+  buildSafetyBarriers() {
+    const barrierMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.3 });
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.95, roughness: 0.15 });
+
+    [-7.2, 0, 7.2].forEach((bx) => {
+      // Left barrier post
+      const postL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.75, 0.2), barrierMat);
+      postL.position.set(bx - 1.8, 0.375, 5.0);
+      this.scene.add(postL);
+
+      // Right barrier post
+      const postR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.75, 0.2), barrierMat);
+      postR.position.set(bx + 1.8, 0.375, 5.0);
+      this.scene.add(postR);
+
+      // Short guard rails
+      const railL = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 12), railMat);
+      railL.rotation.z = Math.PI / 2;
+      railL.position.set(bx - 2.25, 0.65, 5.0);
+      this.scene.add(railL);
+
+      const railR = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 12), railMat);
+      railR.rotation.z = Math.PI / 2;
+      railR.position.set(bx + 2.25, 0.65, 5.0);
+      this.scene.add(railR);
+    });
+  }
+
   buildSensorNodes() {
-    // 9 IoT Sensors with physical position in warehouse
+    // 9 IoT Sensors distributed across warehouse zones
     const sensorConfig = [
-      { id: "SENSOR01", x: -8.51, y: 2.8, z: -1.0, zone: "Freezer" },
-      { id: "SENSOR02", x: -6.0, y: 5.8, z: -3.58, zone: "Freezer" },
-      { id: "SENSOR03", x: -3.49, y: 2.8, z: -1.0, zone: "Freezer" },
-      { id: "SENSOR04", x: -2.51, y: 2.8, z: -1.0, zone: "Chiller" },
-      { id: "SENSOR05", x: 0.0, y: 5.8, z: -3.58, zone: "Chiller" },
-      { id: "SENSOR06", x: 2.51, y: 2.8, z: -1.0, zone: "Chiller" },
-      { id: "SENSOR07", x: 3.49, y: 2.8, z: -1.0, zone: "Ambient" },
-      { id: "SENSOR08", x: 6.0, y: 5.8, z: -3.58, zone: "Ambient" },
-      { id: "SENSOR09", x: 8.51, y: 2.8, z: -1.0, zone: "Ambient" }
+      { id: "SENSOR01", x: -9.0, y: 2.8, z: -1.0, zone: "Freezer" },
+      { id: "SENSOR02", x: -7.2, y: 5.6, z: -4.5, zone: "Freezer" },
+      { id: "SENSOR03", x: -5.4, y: 2.8, z: 2.0, zone: "Freezer" },
+      { id: "SENSOR04", x: -1.8, y: 2.8, z: -1.0, zone: "Chiller" },
+      { id: "SENSOR05", x: 0.0, y: 5.6, z: -4.5, zone: "Chiller" },
+      { id: "SENSOR06", x: 1.8, y: 2.8, z: 2.0, zone: "Chiller" },
+      { id: "SENSOR07", x: 5.4, y: 2.8, z: -1.0, zone: "Ambient" },
+      { id: "SENSOR08", x: 7.2, y: 5.6, z: -4.5, zone: "Ambient" },
+      { id: "SENSOR09", x: 9.0, y: 2.8, z: 2.0, zone: "Ambient" }
     ];
 
     const sensorGeo = new THREE.OctahedronGeometry(0.22);
@@ -636,7 +706,7 @@ class Warehouse3D {
       const sensorMat = new THREE.MeshStandardMaterial({
         color: 0x38bdf8,
         emissive: 0x0284c7,
-        emissiveIntensity: 0.8,
+        emissiveIntensity: 0.9,
         roughness: 0.1
       });
       const mesh = new THREE.Mesh(sensorGeo, sensorMat);
@@ -647,67 +717,66 @@ class Warehouse3D {
     });
   }
 
-  buildDispatchDock() {
-    // Staging and Outbound Dispatch Dock Area
-    const dockGeo = new THREE.BoxGeometry(10, 0.2, 3);
-    const dockMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.8 });
-    const dock = new THREE.Mesh(dockGeo, dockMat);
-    dock.position.set(0, 0.1, 8.8);
-    dock.receiveShadow = true;
-    this.scene.add(dock);
-
-    // Staging dock sign
-    const signGeo = new THREE.PlaneGeometry(3.5, 0.8);
-    const signMat = new THREE.MeshBasicMaterial({ color: 0x0284c7 });
-    const sign = new THREE.Mesh(signGeo, signMat);
-    sign.position.set(0, 2.5, 10.2);
-    this.scene.add(sign);
-  }
-
   buildAGV() {
-    // Model an Autonomous Guided Vehicle (AGV / Robot Forklift)
     const agvGroup = new THREE.Group();
 
-    // Chassis body
-    const bodyGeo = new THREE.BoxGeometry(1.4, 0.5, 2.0);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xeab308, metalness: 0.6, roughness: 0.3 }); // Industrial Yellow
+    // Chassis Body
+    const bodyGeo = new THREE.BoxGeometry(1.3, 0.5, 1.8);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xeab308, metalness: 0.6, roughness: 0.3 }); // Yellow
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.position.y = 0.35;
     body.castShadow = true;
     agvGroup.add(body);
 
-    // Cabin mast
-    const mastGeo = new THREE.BoxGeometry(0.2, 1.8, 0.15);
-    const mastMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.8 });
-    const leftMast = new THREE.Mesh(mastGeo, mastMat);
-    leftMast.position.set(-0.35, 1.2, 0.9);
-    agvGroup.add(leftMast);
-    const rightMast = new THREE.Mesh(mastGeo, mastMat);
-    rightMast.position.set(0.35, 1.2, 0.9);
-    agvGroup.add(rightMast);
+    // Front bumper / counterbalance in dark charcoal
+    const bumperMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.8 });
+    const bumper = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.3, 0.4), bumperMat);
+    bumper.position.set(0, 0.35, -0.8);
+    agvGroup.add(bumper);
+
+    // Cabin mast assembly
+    const mastGeo = new THREE.BoxGeometry(0.12, 1.6, 0.12);
+    const mastL = new THREE.Mesh(mastGeo, bumperMat);
+    mastL.position.set(-0.35, 1.1, 0.8);
+    agvGroup.add(mastL);
+    const mastR = new THREE.Mesh(mastGeo, bumperMat);
+    mastR.position.set(0.35, 1.1, 0.8);
+    agvGroup.add(mastR);
 
     // Lifting forks
+    const forkMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.9, roughness: 0.15 });
     const forkGeo = new THREE.BoxGeometry(0.12, 0.05, 1.1);
-    const forkMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.9 });
     const forkL = new THREE.Mesh(forkGeo, forkMat);
-    forkL.position.set(-0.25, 0.25, 1.45);
+    forkL.position.set(-0.24, 0.22, 1.35);
     agvGroup.add(forkL);
     const forkR = new THREE.Mesh(forkGeo, forkMat);
-    forkR.position.set(0.25, 0.25, 1.45);
+    forkR.position.set(0.24, 0.22, 1.35);
     agvGroup.add(forkR);
 
-    // Flashing safety beacon
-    const beaconGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.12, 8);
+    // Flashing amber safety beacon
+    const beaconGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.12, 12);
     const beaconMat = new THREE.MeshStandardMaterial({
       color: 0xf59e0b,
       emissive: 0xf59e0b,
       emissiveIntensity: 1.2
     });
     const beacon = new THREE.Mesh(beaconGeo, beaconMat);
-    beacon.position.set(0, 0.68, -0.6);
+    beacon.position.set(0, 0.68, -0.4);
     agvGroup.add(beacon);
 
-    // Parked at staging dock by default
+    // Wheels
+    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.8 });
+    const wheelGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.12, 16);
+    [-0.6, 0.6].forEach((wx) => {
+      [-0.6, 0.5].forEach((wz) => {
+        const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+        wheel.rotation.z = Math.PI / 2;
+        wheel.position.set(wx, 0.18, wz);
+        agvGroup.add(wheel);
+      });
+    });
+
+    // Parked in center apron aisle by default (Z = 6.2)
     agvGroup.position.set(0, 0, 6.2);
     this.scene.add(agvGroup);
 
@@ -716,6 +785,11 @@ class Warehouse3D {
       beacon: beacon,
       isMoving: false
     };
+
+    // Secondary forklift in front of Freezer as in reference image
+    const forkFreezer = agvGroup.clone();
+    forkFreezer.position.set(-6.2, 0, 5.6);
+    this.scene.add(forkFreezer);
   }
 
   /**
@@ -727,39 +801,47 @@ class Warehouse3D {
     // Remove pallets that were dispatched or deleted
     for (const [batchId, mesh] of this.palletMeshes.entries()) {
       if (!activeIds.has(batchId)) {
+        // Restore visibility of underlying stock pallet
+        if (mesh.userData.slotId) {
+          const stock = this.stockPalletMap.get(mesh.userData.slotId);
+          if (stock) stock.visible = true;
+        }
         this.scene.remove(mesh);
         this.palletMeshes.delete(batchId);
       }
     }
 
-    // Precise rack slot allocation across 3 tiers (X offset, Y tier, Z depth)
-    const slotMap = {
-      Freezer: { baseX: -6.0, slots: [
-        [-1.2, 0.45, 0], [1.2, 0.45, 0],
-        [-1.2, 1.90, 0], [1.2, 1.90, 0],
-        [-1.2, 3.35, 0], [1.2, 3.35, 0]
-      ], count: 0 },
-      Chiller: { baseX: 0.0, slots: [
-        [-1.2, 0.45, 0], [1.2, 0.45, 0],
-        [-1.2, 1.90, 0], [1.2, 1.90, 0],
-        [-1.2, 3.35, 0], [1.2, 3.35, 0]
-      ], count: 0 },
-      Ambient: { baseX: 6.0, slots: [
-        [-1.2, 0.45, 0], [1.2, 0.45, 0],
-        [-1.2, 1.90, 0], [1.2, 1.90, 0],
-        [-1.2, 3.35, 0], [1.2, 3.35, 0]
-      ], count: 0 }
-    };
+    // Precise rack slot mapping for each zone (focusing on prominent front and mid slots)
+    const slotDefinitions = [
+      { rIdx: 1, tIdx: 0, pIdx: 2, rx: 0.0, ty: 0.44, pz: 0.4 },
+      { rIdx: 0, tIdx: 0, pIdx: 2, rx: -1.85, ty: 0.44, pz: 0.4 },
+      { rIdx: 2, tIdx: 0, pIdx: 2, rx: 1.85, ty: 0.44, pz: 0.4 },
+      { rIdx: 1, tIdx: 1, pIdx: 2, rx: 0.0, ty: 1.79, pz: 0.4 },
+      { rIdx: 0, tIdx: 1, pIdx: 2, rx: -1.85, ty: 1.79, pz: 0.4 },
+      { rIdx: 2, tIdx: 1, pIdx: 2, rx: 1.85, ty: 1.79, pz: 0.4 },
+      { rIdx: 1, tIdx: 0, pIdx: 3, rx: 0.0, ty: 0.44, pz: 2.0 },
+      { rIdx: 0, tIdx: 0, pIdx: 3, rx: -1.85, ty: 0.44, pz: 2.0 },
+      { rIdx: 2, tIdx: 0, pIdx: 3, rx: 1.85, ty: 0.44, pz: 2.0 }
+    ];
+
+    const zoneCounters = { Freezer: 0, Chiller: 0, Ambient: 0 };
+    const zoneBaseX = { Freezer: -7.2, Chiller: 0.0, Ambient: 7.2 };
 
     batchList.forEach((batch) => {
       const zName = batch.zoneName || "Chiller";
-      const zoneData = slotMap[zName] || slotMap["Chiller"];
-      const slotIndex = zoneData.count % zoneData.slots.length;
-      zoneData.count++;
-      const [sx, sy, sz] = zoneData.slots[slotIndex];
-      const posX = zoneData.baseX + sx;
-      const posY = sy;
-      const posZ = sz;
+      const bX = zoneBaseX[zName] !== undefined ? zoneBaseX[zName] : 0.0;
+      const slotIdx = (zoneCounters[zName] || 0) % slotDefinitions.length;
+      zoneCounters[zName] = (zoneCounters[zName] || 0) + 1;
+
+      const slot = slotDefinitions[slotIdx];
+      const slotId = `${zName}_${slot.rIdx}_${slot.tIdx}_${slot.pIdx}`;
+      const posX = bX + slot.rx;
+      const posY = slot.ty;
+      const posZ = slot.pz;
+
+      // Hide background stock pallet at this bay
+      const stock = this.stockPalletMap.get(slotId);
+      if (stock) stock.visible = false;
 
       let mesh = this.palletMeshes.get(batch.batchId);
       const isNextFefo = (batch.batchId === nextFefoBatchId);
@@ -767,11 +849,13 @@ class Warehouse3D {
       if (!mesh) {
         mesh = this.createPalletMesh(batch, isNextFefo);
         mesh.position.set(posX, posY, posZ);
+        mesh.userData.slotId = slotId;
         this.scene.add(mesh);
         this.palletMeshes.set(batch.batchId, mesh);
       } else {
         mesh.position.set(posX, posY, posZ);
         mesh.userData.batch = batch;
+        mesh.userData.slotId = slotId;
         this.updatePalletHighlight(mesh, isNextFefo);
       }
     });
@@ -782,7 +866,7 @@ class Warehouse3D {
 
     // 1. Wooden Euro-Pallet base with deckboards
     const woodMat = new THREE.MeshStandardMaterial({ color: 0x854d0e, roughness: 0.9 });
-    const palletBase = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.12, 1.1), woodMat);
+    const palletBase = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.12, 1.05), woodMat);
     palletBase.castShadow = true;
     palletBase.receiveShadow = true;
     group.add(palletBase);
@@ -794,9 +878,9 @@ class Warehouse3D {
       roughness: 0.35,
       metalness: 0.2,
       emissive: isFefo ? 0xf59e0b : 0x000000,
-      emissiveIntensity: isFefo ? 0.7 : 0.0
+      emissiveIntensity: isFefo ? 0.75 : 0.0
     });
-    const box = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.85, 0.95), boxMat);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.85, 0.95), boxMat);
     box.position.y = 0.50;
     box.castShadow = true;
     group.add(box);
@@ -838,7 +922,7 @@ class Warehouse3D {
     if (box) {
       box.material.color.setHex(isFefo ? 0xf59e0b : 0x0284c7);
       box.material.emissive.setHex(isFefo ? 0xf59e0b : 0x000000);
-      box.material.emissiveIntensity = isFefo ? 0.7 : 0.0;
+      box.material.emissiveIntensity = isFefo ? 0.75 : 0.0;
     }
   }
 
@@ -856,12 +940,12 @@ class Warehouse3D {
     const startX = agv.position.x;
     const startZ = agv.position.z;
     const targetX = mesh.position.x;
-    const targetZ = 3.5; // AGV alignment in aisle
+    const targetZ = mesh.position.z + 1.2;
 
     // Step 1: Smooth camera zoom to target batch
-    this.focusCameraOn(mesh.position.x, mesh.position.y + 1, mesh.position.z + 5);
+    this.focusCameraOn(mesh.position.x, mesh.position.y + 1, mesh.position.z + 4.5);
 
-    // Step 2: Drive AGV from staging dock to rack position
+    // Step 2: Drive AGV from staging position to rack location
     const driveDuration = 1200;
     const t0 = performance.now();
 
@@ -876,7 +960,7 @@ class Warehouse3D {
       if (progress < 1.0) {
         requestAnimationFrame(driveToRack);
       } else {
-        // Step 3: Pick up pallet and drive back to dispatch dock
+        // Step 3: Pick up pallet and drive back to apron staging
         mesh.position.y += 0.3; // Lifted by forks
         const t1 = performance.now();
         const driveToDock = (now2) => {
@@ -885,14 +969,18 @@ class Warehouse3D {
           const ease2 = 0.5 - Math.cos(prog2 * Math.PI) / 2;
 
           agv.position.x = targetX + (0 - targetX) * ease2;
-          agv.position.z = targetZ + (6.5 - targetZ) * ease2;
+          agv.position.z = targetZ + (6.2 - targetZ) * ease2;
           mesh.position.x = agv.position.x;
-          mesh.position.z = agv.position.z + 1.2;
+          mesh.position.z = agv.position.z + 1.1;
 
           if (prog2 < 1.0) {
             requestAnimationFrame(driveToDock);
           } else {
-            // Unload pallet at dispatch bay
+            // Restore visibility of underlying stock pallet
+            if (mesh.userData.slotId) {
+              const stock = this.stockPalletMap.get(mesh.userData.slotId);
+              if (stock) stock.visible = true;
+            }
             this.scene.remove(mesh);
             this.palletMeshes.delete(batchId);
             if (onComplete) onComplete();
@@ -940,7 +1028,7 @@ class Warehouse3D {
     setTimeout(() => {
       if (sensor) {
         sensor.material.emissive.setHex(0x0284c7);
-        sensor.material.emissiveIntensity = 0.8;
+        sensor.material.emissiveIntensity = 0.9;
       }
     }, 4500);
   }
@@ -962,9 +1050,9 @@ class Warehouse3D {
     }
   }
 
-  focusCameraOn(x, y, z) {
+  focusCameraOn(x, y, z, customCamPos = null) {
     const startPos = this.camera.position.clone();
-    const targetPos = new THREE.Vector3(x, y + 2.5, z + 6);
+    const targetPos = customCamPos ? customCamPos.clone() : new THREE.Vector3(x, y + 2.5, z + 5.5);
     const startTarget = this.controls.target.clone();
     const endTarget = new THREE.Vector3(x, y, z);
     const startTime = performance.now();
@@ -1009,6 +1097,7 @@ class Warehouse3D {
     if (!this.container || !this.renderer || !this.camera) return;
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
+    if (w === 0 || h === 0) return;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
@@ -1022,7 +1111,7 @@ class Warehouse3D {
 
     // 1. Rotate active cooling fan impellers
     this.coolingFans.forEach(({ fan, zone }) => {
-      const speed = this.isCoolingActive[zone] ? 16.0 : 1.0;
+      const speed = this.isCoolingActive[zone] ? 16.0 : 1.5;
       fan.rotation.z += speed * delta;
     });
 
@@ -1035,7 +1124,7 @@ class Warehouse3D {
         for (let i = 1; i < count * 3; i += 3) {
           pos[i] -= 0.6 * delta; // Fall downwards like heavy cold air
           if (pos[i] < 0.2) {
-            pos[i] = 4.8;
+            pos[i] = 4.5;
           }
         }
         points.geometry.attributes.position.needsUpdate = true;
@@ -1064,7 +1153,7 @@ class Warehouse3D {
       const fpsBadge = document.getElementById("fps-counter-badge");
       if (fpsBadge && this.renderer.info) {
         const polys = this.renderer.info.render.triangles.toLocaleString();
-        fpsBadge.textContent = `${fps} FPS | ${polys} Triangles | ${this.palletMeshes.size} Pallets`;
+        fpsBadge.textContent = `${fps} FPS | ${polys} Triangles`;
       }
     }
   }
