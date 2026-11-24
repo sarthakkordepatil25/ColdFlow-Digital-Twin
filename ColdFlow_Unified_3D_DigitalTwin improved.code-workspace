@@ -1,12 +1,12 @@
 {
 	"folders": [
 		{
-			"path": ".."
+			"path": "."
 		}
 	],
 	"settings": {
 		"java.project.referencedLibraries": [
-			"ColdFlow grp project/Java/lib/**/*.jar"
+			"Java/lib/**/*.jar"
 		]
 	}
 }
