@@ -1,0 +1,24 @@
+# Environment credentials
+.env
+
+# Build outputs & bytecode
+bin/
+out/
+Java/bin/
+Java/out/
+*.class
+
+# Logs
+*.log
+logs/
+
+# Nested archive duplicates
+ColdFlow grp project/
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.user

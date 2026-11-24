@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ColdFlow | Smart Cold-Chain Warehouse 3D Digital Twin</title>
+  <link rel="stylesheet" href="css/twin.css">
+  <!-- Load Local Three.js & OrbitControls (Zero external dependencies) -->
+  <script src="js/three.min.js"></script>
+  <script src="js/OrbitControls.js"></script>
+  <script src="js/warehouse3D.js"></script>
+  <script src="js/twinController.js"></script>
+</head>
+<body>
+
+  <!-- Full-Screen 3D WebGL Viewport -->
+  <div id="warehouse-viewport"></div>
+
+  <!-- HUD Control Overlay Layer -->
+  <div class="hud-layer">
+
+    <!-- Top Navigation Bar -->
+    <header class="top-bar interactive">
+      <div class="brand-section">
+        <div class="brand-icon">❄</div>
+        <div>
+          <div class="brand-title">Cold<span>Flow</span></div>
+          <div class="brand-subtitle">Smart Cold-Chain 3D Digital Twin</div>
+        </div>
+      </div>
+
+      <div class="system-status-pills">
+        <div class="status-pill">
+          <div id="db-status-dot" class="status-dot"></div>
+          <span id="db-status-label">Supabase Connecting...</span>
+        </div>
+        <div class="status-pill">
+          <div class="status-dot"></div>
+          <span>C++ Engine: <strong id="cpp-engine-label" style="color:var(--cyan);">Checking...</strong></span>
+        </div>
+        <div class="status-pill">
+          <span>Active Batches: <strong id="batch-count-badge" style="color:var(--amber);">0</strong></span>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button id="btn-dispatch-fefo" class="btn btn-amber">
+          <span>⚡</span> Dispatch Next FEFO
+        </button>
+        <button id="btn-add-batch" class="btn btn-primary">
+          <span>+</span> Inbound Batch
+        </button>
+        <button id="btn-cycle-sim" class="btn btn-secondary">
+          <span>⟳</span> Trigger Cycle
+        </button>
+        <button id="btn-sensor-analytics" class="btn btn-secondary">
+          <span>📊</span> Sensor IoT Analytics
+        </button>
+      </div>
+    </header>
+
+    <!-- Cockpit Cards: Left (Zones & Inventory) -->
+    <main class="cockpit-container">
+      <div class="cockpit-left">
+
+        <!-- Zone Telemetry Panel -->
+        <section class="panel-card">
+          <div class="card-header">
+            <span class="card-title">Warehouse Storage Zones</span>
+            <span style="font-size:11px; color:var(--muted);">Click zone for diagnostics</span>
+          </div>
+          <div id="zone-cards-container" class="zone-grid">
+            <div style="font-size:12px; color:var(--muted); padding:10px;">Loading zone temperatures...</div>
+          </div>
+        </section>
+
+        <!-- Inventory & FEFO Queue Panel -->
+        <section class="panel-card">
+          <div class="card-header">
+            <div>
+              <span class="card-title">FEFO Inventory Flow</span>
+              <span style="font-size:11px; color:var(--muted); margin-left:6px;">(<span id="total-units-count">0</span> units)</span>
+            </div>
+            <span style="font-size:11px; color:var(--muted);">Click batch to locate</span>
+          </div>
+          <div id="inventory-list" class="inventory-list">
+            <div style="font-size:12px; color:var(--muted); padding:10px;">Loading inventory records from Supabase...</div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- Contextual Batch Inspector Drawer (Right Side) -->
+      <aside id="batch-inspector-drawer" class="panel-card" style="width:340px; display:none; align-self:flex-start; pointer-events:auto;">
+        <div class="card-header">
+          <div>
+            <span class="card-title">Batch Inspector</span>
+            <span id="inspect-fefo-tag" class="tag tag-warning" style="margin-left:6px; display:none;">NEXT FEFO</span>
+          </div>
+          <button class="btn btn-secondary modal-close" style="padding:2px 8px; font-size:11px;" type="button">✕</button>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px; font-size:13px;">
+          <div><span style="color:var(--muted);">Batch ID:</span> <strong id="inspect-batch-id">--</strong></div>
+          <div><span style="color:var(--muted);">Product Name:</span> <strong id="inspect-product-name">--</strong></div>
+          <div><span style="color:var(--muted);">Quantity:</span> <strong id="inspect-quantity">--</strong></div>
+          <div><span style="color:var(--muted);">Storage Zone:</span> <strong id="inspect-zone">--</strong></div>
+          <div><span style="color:var(--muted);">Expiry Date:</span> <strong id="inspect-expiry">--</strong></div>
+          <div><span style="color:var(--muted);">Status:</span> <span id="inspect-days-left" class="tag tag-normal">--</span></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px; margin-top:14px;">
+          <div style="display:flex; gap:8px;">
+            <button id="btn-inspect-focus" class="btn btn-secondary" style="flex:1;">Focus in 3D</button>
+            <button id="btn-inspect-edit-qty" class="btn btn-secondary" style="flex:1;">Edit Qty</button>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button id="btn-inspect-delete" class="btn btn-secondary" style="flex:1; border-color:rgba(239,68,68,0.4); color:var(--rose);">Delete</button>
+            <button id="btn-inspect-dispatch" class="btn btn-amber" style="flex:1;">Dispatch</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Contextual Zone Diagnostics Drawer (Right Side) -->
+      <aside id="zone-inspector-drawer" class="panel-card" style="width:360px; display:none; align-self:flex-start; pointer-events:auto;">
+        <div class="card-header">
+          <span id="zone-inspect-title" class="card-title">Zone Diagnostics</span>
+          <button class="btn btn-secondary modal-close" style="padding:2px 8px; font-size:11px;" type="button">✕</button>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px; font-size:13px; margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between;">
+            <span style="color:var(--muted);">Current Temperature:</span>
+            <strong id="zone-inspect-temp" style="color:var(--cyan); font-size:15px;">--</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span style="color:var(--muted);">Target Temperature:</span>
+            <strong id="zone-inspect-target">--</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span style="color:var(--muted);">Zone Condition:</span>
+            <strong id="zone-inspect-status">--</strong>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span style="color:var(--muted);">Cooling Compressor:</span>
+            <strong id="zone-inspect-compressor">--</strong>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid rgba(255,255,255,0.08); padding-top:10px;">
+          <div style="font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">COA Hardware Register Bank</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11px; font-family:monospace; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px; border:1px solid var(--line);">
+            <div>R0 (Target): <span id="reg-r0" style="color:var(--cyan);">--</span></div>
+            <div>R1 (Current): <span id="reg-r1" style="color:var(--cyan);">--</span></div>
+            <div>R2 (Error): <span id="reg-r2" style="color:var(--amber);">--</span></div>
+            <div>R3 (Control): <span id="reg-r3">--</span></div>
+            <div style="grid-column:1/3;">R4 (Energy Cumulative): <span id="reg-r4" style="color:var(--emerald);">--</span></div>
+          </div>
+        </div>
+      </aside>
+
+    </main>
+
+    <!-- Camera Navigation Presets Bar -->
+    <nav class="camera-controls">
+      <button class="camera-btn active" data-camera="overview">Warehouse Overview</button>
+      <button class="camera-btn" data-camera="freezer">Freezer Zone (-20°C)</button>
+      <button class="camera-btn" data-camera="chiller">Chiller Zone (4°C)</button>
+      <button class="camera-btn" data-camera="ambient">Ambient Zone (25°C)</button>
+      <button class="camera-btn" data-camera="dock">Dispatch Dock</button>
+    </nav>
+
+    <!-- Real-time 3D Engine Metrics Badge -->
+    <div id="engine-perf-hud" class="status-pill" style="position:fixed; bottom:16px; right:16px; z-index:100; font-size:11px; background:rgba(10,15,26,0.88); backdrop-filter:blur(8px); border:1px solid var(--line); pointer-events:none;">
+      <span style="color:var(--cyan); font-weight:600;">⚡ 3D Engine:</span>
+      <span id="fps-counter-badge" style="font-family:monospace;">60 FPS | 14,800 Polys</span>
+    </div>
+
+  </div>
+
+  <!-- Modal: Add Perishable Batch -->
+  <div id="modal-add-batch" class="modal-overlay">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">Inbound Perishable Batch Intake</h3>
+        <button class="btn btn-secondary modal-close" type="button">✕</button>
+      </div>
+      <form id="form-add-batch">
+        <div class="form-group">
+          <label class="form-label">Batch ID</label>
+          <input id="input-batch-id" class="form-input" type="text" placeholder="e.g. CF011" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Product Name</label>
+          <input id="input-product-name" class="form-input" type="text" placeholder="e.g. Frozen Beef Patties" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Quantity (Units)</label>
+          <input id="input-quantity" class="form-input" type="number" min="1" max="1000" value="80" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Expiry Date (YYYY-MM-DD)</label>
+          <input id="input-expiry-date" class="form-input" type="date" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Assigned Storage Zone</label>
+          <select id="select-zone-name" class="form-select" required>
+            <option value="Freezer">Freezer Zone (-20°C)</option>
+            <option value="Chiller" selected>Chiller Zone (4°C)</option>
+            <option value="Ambient">Ambient Zone (25°C)</option>
+          </select>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
+          <button class="btn btn-secondary modal-close" type="button">Cancel</button>
+          <button class="btn btn-primary" type="submit">Commit to Supabase & Store in 3D Rack</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Historical Sensor IoT Analytics (1.41M Records) -->
+  <div id="modal-sensor-analytics" class="modal-overlay">
+    <div class="modal-dialog" style="width:680px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">IoT Sensor Big-Data Analytics</h3>
+          <span style="font-size:11px; color:var(--muted);">1,411,515 Historical Environmental Measurements</span>
+        </div>
+        <button class="btn btn-secondary modal-close" type="button">✕</button>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <label class="form-label" style="margin:0;">Select Sensor:</label>
+          <select id="sensor-select" class="form-select" style="width:200px;"></select>
+        </div>
+        <button id="btn-focus-sensor" class="btn btn-secondary" type="button">
+          <span>🎯</span> Focus Sensor in 3D
+        </button>
+      </div>
+
+      <!-- Performance Badge -->
+      <div id="sensor-perf-metrics" style="font-size:11px; color:var(--cyan); margin-bottom:10px; background:rgba(56,189,248,0.08); padding:6px 10px; border-radius:6px; border:1px solid rgba(56,189,248,0.2);">
+        Retrieving hourly downsampled points...
+      </div>
+
+      <!-- SVG Time-Series Chart -->
+      <div style="background:#090d16; border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:14px;">
+        <svg id="sensor-chart-svg" width="100%" height="180" viewBox="0 0 560 180"></svg>
+      </div>
+
+      <!-- Detected Anomalies List -->
+      <div>
+        <h4 style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; margin-bottom:6px;">Detected Anomalies (Z-Score & Limits)</h4>
+        <div id="sensor-anomalies-list" style="max-height:110px; overflow-y:auto; background:rgba(0,0,0,0.25); border:1px solid var(--line); border-radius:6px; padding:8px;"></div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+        <button class="btn btn-secondary modal-close" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
